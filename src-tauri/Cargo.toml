@@ -1,0 +1,25 @@
+[package]
+name = "zeropulse-swarm"
+version = "0.1.0"
+description = "ZeroPulse Swarm — multi-agent AI orchestration"
+edition = "2021"
+
+[lib]
+name = "zeropulse_swarm_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.13.5", features = ["stream"] }
+futures-util = "0.3.34"
+tauri-plugin-dialog = "2.8.1"
+dunce = "1.0.5"
+tiny_http = "0.12.0"
+uuid = { version = "1.26.1", features = ["v4"] }
+keyring = { version = "4", default-features = false, features = ["v1", "windows-native-keyring-store"] }
