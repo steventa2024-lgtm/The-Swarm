@@ -13,8 +13,8 @@ What to test, in a sensible order, and what "good" looks like. Each section list
 2. For live runs with local models: install Ollama, run `ollama serve`, and pull at least one coder model (e.g. `ollama pull qwen2.5-coder:7b`). Several different models make the auto-assign test more interesting.
 3. Automated checks (optional but quick):
    ```bash
-   npm test                    # 64 unit tests
-   cd src-tauri && cargo test  # Rust path-safety tests
+   npm test                    # 80 unit tests (incl. the live driver: Stop, Pause, token-saving)
+   cd src-tauri && cargo test  # 7 Rust tests (path safety, check detection)
    ```
 
 ## 1. Smoke test (2 min) ✅
@@ -102,13 +102,28 @@ React/TSX previews need internet (React loads from esm.sh). If a preview is blan
 
 Safety checks worth trying: you can't apply into a folder you haven't approved; files outside the folder are never written.
 
-## 7. Pause / Stop ⚠️ not verified live
+## 6b. Verify & fix ✅ (try it on your own project)
+
+After **Apply** succeeds, a **Verify the result** panel appears.
+
+| Check | Expected |
+| --- | --- |
+| Buttons offered | Only what your project defines: `npm run test / typecheck / lint / build / check`, `cargo check / test`, `pytest`, and a JavaScript syntax check. Hover a button to see the exact command it runs. A script like `deploy` or `start` is never offered. |
+| Run one | Live output streams in; the button turns green (passed) or red (failed) with the time taken |
+| **Stop** during a long check | Ends within a few seconds and kills the whole process tree (no stray `node` left in Task Manager) |
+| A failing check | A red banner offers **Ask the team to fix it**; clicking it closes the dialog and puts a prepared prompt in the task box. Review it, then press Run |
+| After running | The check appears in the run's Final output list as pass / fail |
+| No `node_modules` | A hint says to run `npm install` yourself first; the app never installs dependencies |
+
+This **runs your project's own scripts**, so only do it in projects you trust. Each run has a 3-minute timeout.
+
+## 7. Pause / Stop ✅
 
 During a live run:
-- **Pause** → status shows *Paused*; the next stage waits; in-flight model calls finish. **Resume** continues.
-- **Stop** → status *Stopped*; the run ends and appears in history; no more model calls start.
+- **Pause** → status shows *Paused* and the clock freezes; the next stage waits; in-flight model calls finish. **Resume** continues.
+- **Stop** → status *Stopped* within about a second; the run ends and appears in history; no worker stays "working" and no more model calls start. Stop while *paused* also ends the run (status must not stay "Paused").
 
-Report anything that hangs, or a run that keeps spending tokens after Stop.
+Two bugs here were found and fixed by testing (a worker starting after Stop; status stuck on Paused after Stop) and are covered by automated tests. If you still see a run that spends tokens after Stop, please report it.
 
 ## 8. Settings, budgets and persistence ✅
 
@@ -143,5 +158,6 @@ Open an issue with:
 - [ ] Preview renders and is interactive
 - [ ] Review & apply writes only selected files; conflicts require a choice
 - [ ] Planner is the only paid model under Token saver ⚠️
-- [ ] Pause / Resume / Stop behave ⚠️
+- [x] Pause / Resume / Stop behave (verified; re-check on your paid provider ⚠️)
+- [ ] Verify runs your project's tests and a failure offers "Ask the team to fix it"
 - [ ] Restart keeps your settings

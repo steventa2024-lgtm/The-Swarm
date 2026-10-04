@@ -1,6 +1,7 @@
 use tauri::Manager;
 use tauri_plugin_sql::{Builder as SqlBuilder, Migration, MigrationKind};
 
+mod checks;
 mod fs;
 mod preview;
 mod provider;
@@ -27,6 +28,7 @@ pub fn run() {
         )
         .manage(provider::Inflight::default())
         .manage(fs::ApprovedRoots::default())
+        .manage(checks::RunningChecks::default())
         .setup(|app| {
             let roots = fs::load_approved(app.handle());
             app.state::<fs::ApprovedRoots>().set(roots);
@@ -45,7 +47,10 @@ pub fn run() {
             secrets::secret_status,
             secrets::secret_delete,
             preview::preview_publish,
-            preview::preview_clear
+            preview::preview_clear,
+            checks::detect_checks,
+            checks::run_check,
+            checks::cancel_check
         ])
         .run(tauri::generate_context!())
         .expect("error while running ZeroPulse Swarm");

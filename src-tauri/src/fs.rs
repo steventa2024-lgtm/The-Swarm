@@ -18,7 +18,7 @@ use tauri_plugin_dialog::DialogExt;
 
 const MAX_FILE_BYTES: usize = 1_000_000;
 const MAX_FILES_PER_APPLY: usize = 60;
-const SKIP_DIRS: &[&str] = &[
+pub(crate) const SKIP_DIRS: &[&str] = &[
     ".git", "node_modules", "target", "dist", "build", ".next", ".turbo", "__pycache__", "venv", ".venv", ".idea", ".vscode",
 ];
 
@@ -60,7 +60,7 @@ fn canonical(p: &Path) -> Result<PathBuf, String> {
 }
 
 /// Root must be an approved folder; returns its canonical form.
-fn approved_root(state: &ApprovedRoots, root: &str) -> Result<PathBuf, String> {
+pub(crate) fn approved_root(state: &ApprovedRoots, root: &str) -> Result<PathBuf, String> {
     let c = canonical(Path::new(root))?;
     if state.0.lock().unwrap().contains(&c) {
         Ok(c)

@@ -216,7 +216,9 @@ export const liveDriver: OrchestratorDriver = {
         m.costSeries = [...m.costSeries, m.costUsd].slice(-48)
         m.throughputSeries = [...m.throughputSeries, m.throughput].slice(-48)
       }
-      run.status = pausedAt !== null ? 'paused' : phase
+      // A finished run must never read "paused" (e.g. Stop pressed while paused).
+      const terminal = phase === 'completed' || phase === 'failed' || phase === 'stopped'
+      run.status = terminal ? phase : pausedAt !== null ? 'paused' : phase
       run.timeline = timeline()
       return {
         ...run,
@@ -233,7 +235,9 @@ export const liveDriver: OrchestratorDriver = {
     }
     const ticker = window.setInterval(() => { if (!finished) emit() }, 400)
 
-    const waitIfPaused = async () => { if (gate) await gate.promise; if (signal.aborted) throw new DOMException('Aborted', 'AbortError') }
+    /** Call before any state change in an async stage: after Stop, nothing may start or mutate the run. */
+    const throwIfAborted = () => { if (signal.aborted) throw new DOMException('Aborted', 'AbortError') }
+    const waitIfPaused = async () => { if (gate) await gate.promise; throwIfAborted() }
 
     const tickChecklist = (w: Worker) => {
       const n = w.checklist.length
@@ -248,6 +252,7 @@ export const liveDriver: OrchestratorDriver = {
       expected: number,
       opts: { json?: boolean; onText?: (full: string) => void } = {},
     ): Promise<ChatResult> => {
+      throwIfAborted()
       const provider = ctx.providers.find((p) => p.id === w.providerId)!
       let text = ''
       w.tokensIn = Math.ceil(messages.reduce((n, m) => n + m.content.length, 0) / 4)
@@ -310,6 +315,7 @@ export const liveDriver: OrchestratorDriver = {
     // ── pipeline ──────────────────────────────────────────────
     const runPlanner = async () => {
       planner.startedAt = 0
+      throwIfAborted()
       event('plan', `Planner (${planner.modelLabel}) is reading the master prompt`, planner)
       await loadTree()
       const roleList = workers.map((w) => `- ${w.role}: ${ROLE_META[w.role].label}`).join('\n')
@@ -379,6 +385,7 @@ export const liveDriver: OrchestratorDriver = {
     }
 
     const runWorker = async (w: Worker) => {
+      throwIfAborted() // a worker whose turn comes after Stop must not start (or touch the run at all)
       const st = run.subtasks.find((s) => s.id === w.subtaskId)!
       const fallback = script.byWorker[w.id]
       const b = briefs.get(w.id)!
@@ -456,6 +463,7 @@ export const liveDriver: OrchestratorDriver = {
     }
 
     const runReviewer = async () => {
+      throwIfAborted()
       reviewer.status = 'working'
       reviewer.startedAt = run.elapsedMs
       reviewer.summary = 'Checking the work against each agent\'s acceptance criteria'
@@ -519,7 +527,10 @@ export const liveDriver: OrchestratorDriver = {
         phase = 'running'
         emit()
         await waitIfPaused()
-        await Promise.all(workers.map(async (w, i) => { await new Promise((r) => setTimeout(r, i * 150)); await runWorker(w) }))
+        // Wait for every worker to settle (not just the first failure) so none can touch the run after we finalise.
+        const settled = await Promise.allSettled(workers.map(async (w, i) => { await new Promise((r) => setTimeout(r, i * 150)); await runWorker(w) }))
+        const failure = settled.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+        if (failure) throw failure.reason
         if (workers.every((w) => w.status === 'error')) throw new Error('Every worker failed — check the provider connection and model names.')
         phase = 'reviewing'
         emit()

@@ -22,6 +22,10 @@ interface SwarmState {
   applyOpen: boolean
 
   setApplyOpen: (open: boolean) => void
+  /** Adds (or updates) a real check result on the final output. */
+  recordCheck: (label: string, passed: boolean) => void
+  /** Puts a prepared prompt in the task box and returns to the Swarm view. */
+  prepareFix: (prompt: string) => void
   select: (id: string | null) => void
   setPrompt: (p: string) => void
   setMode: (m: RunMode) => void
@@ -47,6 +51,17 @@ export const useSwarm = create<SwarmState>()((set, get) => ({
   applyOpen: false,
 
   setApplyOpen: (applyOpen) => set({ applyOpen }),
+  recordCheck: (label, passed) =>
+    set((s) => {
+      const out = s.run?.finalOutput
+      if (!s.run || !out) return s
+      const checks = [...out.checks.filter((c) => c.label !== label), { label, passed }]
+      return { run: { ...s.run, finalOutput: { ...out, checks } } }
+    }),
+  prepareFix: (prompt) => {
+    useApp.getState().setView('graph')
+    set({ prompt, applyOpen: false })
+  },
   select: (selectedId) => set({ selectedId }),
   setPrompt: (prompt) => set({ prompt }),
   setMode: (mode) => set({ mode }),

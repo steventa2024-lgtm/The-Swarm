@@ -25,6 +25,7 @@ Big prompts burn tokens. Sending the whole thing to one expensive model is slow 
 | **Swarm** | Task box (agent count, run mode), live orchestration graph, worker cards, activity feed, file changes, token / cost / provider metrics. Views: **Graph**, **Timeline**, **Preview**. |
 | **Preview** | Renders what the agents built, updating as each finishes. Static HTML/CSS/JS and React/TSX. Desktop / tablet / phone widths, error banner, and a Code tab. |
 | **Review & apply** | Compare every proposed file against your real files as a diff, resolve files several agents wrote, then write the ones you pick into your project folder. |
+| **Verify & fix** | After applying, run the project's own tests / build / lint (or a JS syntax check) and see the real output. If one fails, **Ask the team to fix it** prepares a fix prompt from the failure. |
 | **Agents** | Auto-assign models by strength, per-agent model, editable **skill** (standing instructions), capabilities, enable/disable. |
 | **Integrations** | Test & connect providers (Ollama, llama.cpp, OpenAI-compatible, OpenRouter, Anthropic); store API keys securely. |
 | **Projects / Knowledge / Templates / Settings / Support** | Working folders per project, project memory notes, reusable task presets, budgets and preferences, diagnostics. |
@@ -62,6 +63,9 @@ Reviewer (compact digest, checks every agent's acceptance criteria)
    │
    ▼
 Final output  →  Preview tab  →  Review & apply to your project folder
+   │
+   ▼
+Verify (run your tests/build)  →  failed?  →  "Ask the team to fix it"  →  back to the Planner
 ```
 
 Worker output is **proposed file contents**. Nothing touches your disk until you review and apply it.
@@ -84,7 +88,7 @@ src/
     blueprints.ts    Placeholder plans used by the simulator
   providers/         OpenAI-compatible + Anthropic adapters, SSE parser, transport, connection test
   preview/build.ts   Turns proposed files into a runnable preview (HTML, or TSX via sucrase + import map)
-  lib/               diff, secrets + file-access bridges, formatting helpers
+  lib/               diff, checks runner + secrets + file-access bridges, formatting helpers
   store/             Zustand: persisted workspace data, live run state
   persistence/       SQLite (desktop) or localStorage (browser)
   components/ pages/ UI (shadcn-style primitives, graph, rails, dialogs, 8 pages)
@@ -94,8 +98,10 @@ src-tauri/
   src/secrets.rs     API keys in Windows Credential Manager (write / check / delete, never read back)
   src/fs.rs          Project file access confined to folders the user approved
   src/preview.rs     Loopback preview server, sandbox-friendly CSP
+  src/checks.rs      Runs a project's tests/build/lint from a fixed menu, with timeout + cancel
   migrations/        SQLite schema
 docs/TESTING.md     What to test, in what order, and what "good" looks like
+.github/workflows/  CI: typecheck, unit tests, web build (Linux) and Rust tests (Windows)
 ```
 
 ## Security model
@@ -104,25 +110,26 @@ docs/TESTING.md     What to test, in what order, and what "good" looks like
 - **File access** is limited to project folders you pick in the native dialog. Approval is enforced in Rust and persisted; paths with `..`, absolute paths, symlink escapes and `.git` are rejected.
 - **Previews** run in a sandboxed iframe served from a loopback port on its own origin, with a CSP that blocks the page from making its own network requests. Generated code cannot reach the app, its storage or its IPC.
 - **Live runs send your prompt (and any related project notes) to the providers you verified.** Use *Local Only* mode, or only connect local providers, to keep everything on your machine.
+- **Running checks** executes your project's own scripts, so it is a deliberate, per-click action. The UI shows the exact script text first. The webview can only choose from a fixed menu (`npm run test|typecheck|lint|build|check`, `cargo check|test`, `pytest`, a JS syntax check) in an approved folder — it can never send a command line. Every run has a 3-minute timeout and a Stop button that kills the whole process tree.
 - Ollama "cloud" models are hidden from local providers because they leave the machine.
 
 ## What is and isn't verified
 
-**Verified in the real desktop app:** live runs against Ollama (plan, parallel build, review), auto-assign, token-saving skip of idle roles, key storage and bridge, preview of static pages and React pages, the confined file read/apply flow, conflict handling, the release build and Desktop launch. 64 unit tests and 2 Rust tests pass.
+**Verified in the real desktop app:** live runs against Ollama (plan, parallel build, review), Pause / Resume / Stop, auto-assign, token-saving skip of idle roles, key storage and bridge, preview of static pages and React pages, the confined file read/apply flow, conflict handling, the release build and Desktop launch. 80 unit tests and 7 Rust tests pass.
 
 **Not verified yet:**
 - **OpenAI, OpenRouter and Anthropic adapters** with real keys (the code follows the documented protocols, but no real request has been made).
-- **Pause / Stop during a live run.**
 - The native **folder-picker dialog** (its approval logic is tested; the dialog itself is not automated).
 - The **MSI / NSIS installers** (built, never installed).
 - A second live run after the latest "don't write other agents' files" prompt change.
+- **CI** (`.github/workflows/ci.yml`) is written and its steps pass locally, but it has not run on GitHub yet.
 
 **Known limitations:**
 - Windows only for stored keys right now (the credential-store feature is enabled for Windows only).
-- Local models are slow to load and their output quality varies; the reviewer is an LLM opinion, not a build result — nothing runs your tests or type-checker yet.
+- Local models are slow to load and their output quality varies; the reviewer is still an LLM opinion — use **Verify** for real results. Dependencies are never installed for you (run `npm install` yourself first).
 - React previews load React from esm.sh, so they need internet.
 - Model strength profiles are heuristics from model names and prices, not benchmarks.
-- No agent feedback loop yet: a failed review doesn't automatically send fixes back to the responsible worker.
+- The fix loop is manual: a failing check prepares a fix prompt, but you press Run. Nothing re-runs the team automatically.
 
 ## Contributing / extending
 

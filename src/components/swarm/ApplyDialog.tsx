@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { useApp } from '@/store/app'
 import { useSwarm } from '@/store/swarm'
 import type { FileChange } from '@/types'
+import { VerifyPanel } from './VerifyPanel'
 
 interface Proposal { path: string; versions: FileChange[] }
 type Existing = { state: 'ok'; read: ReadResult } | { state: 'error'; message: string }
@@ -227,7 +228,7 @@ export function ApplyDialog() {
             )}
 
             {(fatal || results) && (
-              <div className="border-t hairline px-5 py-3 text-[12px]">
+              <div className="max-h-[48%] overflow-y-auto border-t hairline px-5 py-3 text-[12px]">
                 {fatal && <p className="text-bad">{fatal}</p>}
                 {results && (
                   <ul className="space-y-0.5">
@@ -239,13 +240,18 @@ export function ApplyDialog() {
                     ))}
                   </ul>
                 )}
+                {results?.some((r) => r.ok) && root && (
+                  <div className="mt-3 border-t hairline pt-3">
+                    <VerifyPanel root={root} task={run?.task.prompt} />
+                  </div>
+                )}
               </div>
             )}
 
             <footer className="flex items-center justify-between gap-3 border-t hairline px-5 py-3">
               <p className="text-[11.5px] text-ink-3">
                 {results
-                  ? `${results.filter((r) => r.ok).length} of ${results.length} written. Review them with git before committing.`
+                  ? `${results.filter((r) => r.ok).length} of ${results.length} written. Verify below, and review the changes with git before committing.`
                   : `${selected.length} of ${rows.length} selected${rows.some((r) => r.unresolved) ? ' · conflicts need a version chosen' : ''}. Nothing is written until you apply.`}
               </p>
               <div className="flex gap-2">
