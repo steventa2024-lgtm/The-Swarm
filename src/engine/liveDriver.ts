@@ -2,7 +2,8 @@ import { adapterFor, isAbort, type ChatResult } from '@/providers'
 import { skillFor } from '@/data/skills'
 import { ROLE_META } from '@/lib/meta'
 import { cleanPath, listTree, readText } from '@/lib/fsBridge'
-import { clamp, uid } from '@/lib/utils'
+import { paidTokens } from '@/lib/budget'
+import { clamp, formatTokens, uid } from '@/lib/utils'
 import type {
   ActivityKind, FileChange, FinalOutput, Metrics, Run, RunStatus, Subtask, TimelineEntry, Worker,
 } from '@/types'
@@ -103,6 +104,40 @@ function parseHeaderFiles(text: string): ParsedFile[] {
   return out
 }
 
+const MAX_RETRIES = 3
+
+/** Transient failures worth retrying: rate limits, overload and server hiccups. Auth/validation errors are not. */
+export function isRetryable(e: unknown): boolean {
+  const m = e instanceof Error ? e.message : String(e)
+  return /HTTP (429|500|502|503|504|529)\b/.test(m) || /rate.?limit|overloaded|too many requests|temporarily unavailable/i.test(m)
+}
+
+/**
+ * How long to wait before retry number `attempt` (0-based). Honours a "try again in 1.2s" hint when the
+ * provider gives one; otherwise exponential backoff (base, 2.5×base, 6×base) with a little jitter.
+ */
+export function retryDelayMs(e: unknown, attempt: number, baseMs = 2000, rand: () => number = Math.random): number {
+  const m = e instanceof Error ? e.message : String(e)
+  const hint = /(?:try again|retry) (?:in|after) ([\d.]+)\s*(ms|s)\b/i.exec(m)
+  if (hint) {
+    const ms = Number(hint[1]) * (hint[2].toLowerCase() === 'ms' ? 1 : 1000)
+    return Math.min(30_000, Math.max(baseMs / 2, ms + 250))
+  }
+  const factor = [1, 2.5, 6][Math.min(attempt, 2)]
+  return Math.round(baseMs * factor * (0.85 + rand() * 0.3))
+}
+
+const shortError = (e: unknown) => (e instanceof Error ? e.message : String(e)).replace(/\s+/g, ' ').slice(0, 90)
+
+/** Sleep that ends early (by rejecting) when the run is stopped. */
+const abortableSleep = (ms: number, signal: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const t = window.setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve() }, ms)
+    const onAbort = () => { window.clearTimeout(t); reject(new DOMException('Aborted', 'AbortError')) }
+    if (signal.aborted) return onAbort()
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+
 const firstParagraph = (text: string) =>
   text.replace(/<think>[\s\S]*?(<\/think>|$)/g, '').trim().split(/\n\s*\n|### FILE/)[0].replace(/\s+/g, ' ').slice(0, 170)
 
@@ -119,6 +154,13 @@ export const liveDriver: OrchestratorDriver = {
     }
 
     const { run, script } = createRun(req, ctx)
+
+    // Strict budget: don't even start a run that would spend paid tokens once the daily limit is already used.
+    const isPaid = (providerId: string) => !ctx.providers.find((p) => p.id === providerId)?.local
+    const budget = ctx.budget
+    if (budget && budget.mode === 'strict' && budget.usedBefore >= budget.limit && run.workers.some((w) => isPaid(w.providerId))) {
+      return failImmediately(req, ctx, onUpdate, `Daily paid-token budget reached (${formatTokens(budget.usedBefore)} of ${formatTokens(budget.limit)}). Raise it in Settings, change the budget mode, or use local models.`, 'Budget reached')
+    }
     const workers = run.workers.slice(1, -1)
     const planner = run.workers[0]
     const reviewer = run.workers[run.workers.length - 1]
@@ -202,12 +244,38 @@ export const liveDriver: OrchestratorDriver = {
       run.metrics.deletions = 0
     }
 
+    // Paid-token budget: warn at 80%, and at 100% either stop (Strict) or keep going with a warning (Balanced).
+    let budgetStage = 0
+    const checkBudget = () => {
+      const b = ctx.budget
+      if (!b || b.mode === 'unlimited' || b.limit <= 0 || finished || signal.aborted) return
+      const mine = paidTokens(run.metrics, ctx.providers)
+      if (mine === 0) return // nothing paid is being spent, so there is nothing for the budget to protect
+      const total = b.usedBefore + mine
+      const pct = (total / b.limit) * 100
+      const used = `${formatTokens(total)} of ${formatTokens(b.limit)}`
+      if (pct >= 100 && budgetStage < 2) {
+        budgetStage = 2
+        if (b.mode === 'strict') {
+          event('warning', `Daily paid-token budget reached (${used}) — stopping the run to protect your limit`)
+          abort.abort()
+          gate?.open()
+        } else {
+          event('warning', `Over the daily paid-token budget (${used}). Balanced mode lets the run continue.`)
+        }
+      } else if (pct >= 80 && budgetStage < 1) {
+        budgetStage = 1
+        event('warning', `80% of the daily paid-token budget used (${used})`)
+      }
+    }
+
     let lastSample = 0
     const snapshot = (): Run => {
       refreshFiles()
       run.elapsedMs = (pausedAt ?? performance.now()) - t0 - pausedTotal
       for (const w of run.workers) if (w.status === 'working') w.elapsedMs = run.elapsedMs - (w.startedAt ?? 0)
       run.metrics = recompute(run.metrics)
+      checkBudget()
       const sec = Math.floor(run.elapsedMs / 1000)
       if (sec !== lastSample) {
         lastSample = sec
@@ -257,17 +325,34 @@ export const liveDriver: OrchestratorDriver = {
       let text = ''
       w.tokensIn = Math.ceil(messages.reduce((n, m) => n + m.content.length, 0) / 4)
       w.tokensOut = 0
-      const result = await adapterFor(provider).chat(provider, {
-        model: w.modelId, messages, maxTokens, json: opts.json, signal,
-        onDelta: (d) => {
-          text += d
-          w.tokensOut = Math.ceil(text.length / 4)
-          w.progress = clamp((w.tokensOut / expected) * 100, w.progress, 96)
-          tickChecklist(w)
-          opts.onText?.(text)
+
+      // Rate limits and overload are normal with several agents hitting one paid API. Retry with
+      // backoff — but only if nothing has streamed yet, otherwise we'd duplicate partial output.
+      let result: ChatResult
+      for (let attempt = 0; ; attempt++) {
+        try {
+          result = await adapterFor(provider).chat(provider, {
+            model: w.modelId, messages, maxTokens, json: opts.json, signal,
+            onDelta: (d) => {
+              text += d
+              w.tokensOut = Math.ceil(text.length / 4)
+              w.progress = clamp((w.tokensOut / expected) * 100, w.progress, 96)
+              tickChecklist(w)
+              opts.onText?.(text)
+              scheduleEmit()
+            },
+          })
+          break
+        } catch (e) {
+          if (isAbort(e) || text.length > 0 || attempt >= MAX_RETRIES || !isRetryable(e)) throw e
+          const wait = retryDelayMs(e, attempt, ctx.retryBaseMs ?? 2000)
+          const secs = Math.max(1, Math.round(wait / 1000))
+          w.recentAction = `Rate limited — retrying in ${secs}s`
+          event('warning', `${w.name}: ${provider.name} is busy (${shortError(e)}). Retrying in ${secs}s (${attempt + 1}/${MAX_RETRIES})`, w)
           scheduleEmit()
-        },
-      })
+          await abortableSleep(wait, signal)
+        }
+      }
       w.tokensIn = result.usage.inputTokens
       w.tokensOut = result.usage.outputTokens
       return result
@@ -599,13 +684,17 @@ function errMsg(e: unknown): string {
 }
 
 /** No verified provider: surface a failed run with an actionable message instead of a silent no-op. */
-function failImmediately(req: RunRequest, ctx: DriverContext, onUpdate: (run: Run) => void): RunController {
+function failImmediately(
+  req: RunRequest, ctx: DriverContext, onUpdate: (run: Run) => void,
+  message = 'No verified provider. Open Integrations and connect one (e.g. Ollama) before starting a live run.',
+  action = 'No verified provider',
+): RunController {
   const { run } = createRun(req, { ...ctx, providers: [{ id: 'none', name: 'none', kind: 'ollama', endpoint: '', local: true, status: 'connected', models: [{ id: 'none', label: 'No provider', tier: 'local', contextWindow: 0, inputCostPer1M: 0, outputCostPer1M: 0, tokensPerSecond: 1 }] }] })
   run.status = 'failed'
   run.workers.forEach((w) => { w.status = 'idle'; w.recentAction = '—' })
   run.workers[0].status = 'error'
-  run.workers[0].recentAction = 'No verified provider'
-  run.events = [{ id: uid('ev'), at: 0, kind: 'warning', message: 'No verified provider. Open Integrations and connect one (e.g. Ollama) before starting a live run.' }, ...run.events]
+  run.workers[0].recentAction = action
+  run.events = [{ id: uid('ev'), at: 0, kind: 'warning', message }, ...run.events]
   queueMicrotask(() => onUpdate(run))
   return { pause() {}, resume() {}, stop() {}, dispose() {} }
 }

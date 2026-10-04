@@ -18,6 +18,10 @@ export interface DriverContext {
   getSpeed: () => number
   /** Simulator only: pre-advance this many ms before the first emit. */
   warmupMs?: number
+  /** Live driver: daily paid-token budget and what has already been used in the last 24 h. */
+  budget?: { mode: 'strict' | 'balanced' | 'unlimited'; limit: number; usedBefore: number }
+  /** Live driver: base delay for rate-limit retries (ms). Tests shorten it. */
+  retryBaseMs?: number
   /** Live driver: project memory rendered as text for prompts. */
   projectNotes?: string
   projectName?: string

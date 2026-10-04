@@ -104,6 +104,15 @@ docs/TESTING.md     What to test, in what order, and what "good" looks like
 .github/workflows/  CI: typecheck, unit tests, web build (Linux) and Rust tests (Windows)
 ```
 
+## Cost controls
+
+- **Token budget (Settings).** A daily limit on *paid* tokens over a rolling 24 hours. Local models are free and never counted, and neither are simulated runs or the sample history.
+  - **Strict:** a paid run won't start once the limit is used up, and a live run that reaches it is stopped. An all-local run is never blocked.
+  - **Balanced** (default): warns at 80% and 100% but never interrupts a run.
+  - **Off:** no limit.
+- **Rate limits and overload.** Hosted APIs return HTTP 429 / 5xx when several agents call them at once. A worker retries up to 3 times with backoff (honouring a "try again in…" hint), shown in the activity feed, and only if nothing had streamed yet. Auth errors such as a bad key are not retried. Stop cancels a wait immediately.
+- **Skipped roles and slim briefs** (see above) are the main saving; the budget is the safety net.
+
 ## Security model
 
 - **API keys** live in Windows Credential Manager. The UI can save, check and delete a key but can never read one back; only the Rust bridge reads it, to attach a header. Key names must end in `KEY` or `TOKEN`.
@@ -115,14 +124,13 @@ docs/TESTING.md     What to test, in what order, and what "good" looks like
 
 ## What is and isn't verified
 
-**Verified in the real desktop app:** live runs against Ollama (plan, parallel build, review), Pause / Resume / Stop, auto-assign, token-saving skip of idle roles, key storage and bridge, preview of static pages and React pages, the confined file read/apply flow, conflict handling, the release build and Desktop launch. 80 unit tests and 7 Rust tests pass.
+**Verified in the real desktop app:** live runs against Ollama (plan, parallel build, review), Pause / Resume / Stop, auto-assign, token-saving skip of idle roles, key storage and bridge, preview of static pages and React pages, the confined file read/apply flow, conflict handling, the release build and Desktop launch. 117 unit tests and 7 Rust tests pass.
 
 **Not verified yet:**
-- **OpenAI, OpenRouter and Anthropic adapters** with real keys (the code follows the documented protocols, but no real request has been made).
+- **OpenAI, OpenRouter and Anthropic adapters** with real keys. Request shape, auth headers, streaming, usage and error handling are covered by unit tests against the documented protocols, but no real request has been made.
 - The native **folder-picker dialog** (its approval logic is tested; the dialog itself is not automated).
 - The **MSI / NSIS installers** (built, never installed).
 - A second live run after the latest "don't write other agents' files" prompt change.
-- **CI** (`.github/workflows/ci.yml`) is written and its steps pass locally, but it has not run on GitHub yet.
 
 **Known limitations:**
 - Windows only for stored keys right now (the credential-store feature is enabled for Windows only).

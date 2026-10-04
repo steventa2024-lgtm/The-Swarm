@@ -234,8 +234,12 @@ export interface RunSummary {
   agentCount: number
   durationMs: number
   tokens: number
+  /** Tokens sent to paid (non-local) providers. Absent on older entries. */
+  paidTokens?: number
   costUsd: number
   startedAt: number
+  /** Simulated and sample runs never count toward the token budget. */
+  simulated?: boolean
 }
 
 // ───────────────────────── Workspace content ─────────────────────────

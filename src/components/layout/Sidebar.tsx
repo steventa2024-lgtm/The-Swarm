@@ -3,6 +3,7 @@ import {
   BookMarked, FolderKanban, LayoutTemplate, LifeBuoy, Plug, Settings, Sparkles, Users, Workflow,
   type LucideIcon,
 } from 'lucide-react'
+import { budgetLevel, paidTokens, usedLast24h } from '@/lib/budget'
 import { cn, formatTokens } from '@/lib/utils'
 import { useApp } from '@/store/app'
 import { useSwarm } from '@/store/swarm'
@@ -74,13 +75,16 @@ export function Sidebar() {
   const setPage = useApp((s) => s.setPage)
   const history = useApp((s) => s.history)
   const budget = useApp((s) => s.preferences.tokenBudget)
-  const live = useSwarm((s) => s.run)
+  const mode = useApp((s) => s.preferences.tokenBudgetMode)
+  const providers = useApp((s) => s.providers)
+  const run = useSwarm((s) => s.run)
+  const runIsLive = useSwarm((s) => s.runIsLive)
 
-  const dayAgo = Date.now() - 24 * 3_600_000
-  const used =
-    history.filter((h) => h.startedAt > dayAgo).reduce((s, h) => s + h.tokens, 0) +
-    (live ? live.metrics.tokensIn + live.metrics.tokensOut : 0)
-  const pct = Math.min(100, (used / budget) * 100)
+  // Paid tokens only: local models are free, and simulated runs spend nothing.
+  const used = usedLast24h(history) + (runIsLive ? paidTokens(run?.metrics, providers) : 0)
+  const { level, pct } = budgetLevel(used, budget, mode)
+  const barColor = level === 'over' ? '#f87171' : level === 'warn' ? '#fbbf24' : '#4d9bff'
+  const note = mode === 'strict' ? 'Strict: a run that reaches the limit is stopped.' : mode === 'balanced' ? 'Balanced: warns at 80% and 100%.' : 'Budget guard is off.'
 
   return (
     <aside className="glass relative z-10 flex w-[232px] shrink-0 flex-col border-y-0 border-l-0 px-3 py-4 max-xl:w-[68px] max-xl:px-2">
@@ -103,16 +107,16 @@ export function Sidebar() {
       <div className="glass mb-3 rounded-2xl p-3 max-xl:hidden">
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-1.5 text-[11px] font-semibold text-ink">
-            <Sparkles className="h-3.5 w-3.5 text-sky" /> Pro workspace
+            <Sparkles className="h-3.5 w-3.5 text-sky" /> Paid usage
           </span>
           <span className="rounded bg-azure/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-azure-hi">Local</span>
         </div>
         <div className="mt-2.5 flex items-baseline justify-between text-[11px]">
-          <span className="text-ink-3">Tokens · 24h</span>
+          <span className="text-ink-3">Paid tokens · 24h</span>
           <span className="font-mono text-ink-2">{formatTokens(used)} / {formatTokens(budget)}</span>
         </div>
-        <ProgressBar value={pct} className="mt-1.5" height={5} color={pct > 85 ? '#fbbf24' : '#4d9bff'} />
-        <p className="mt-2 text-[10.5px] leading-snug text-ink-4">Budget guard pauses runs near your daily limit.</p>
+        <ProgressBar value={Math.min(100, pct)} className="mt-1.5" height={5} color={barColor} />
+        <p className="mt-2 text-[10.5px] leading-snug text-ink-4">{note} Local models are free and not counted.</p>
       </div>
 
       <nav className="flex flex-col gap-1 border-t hairline pt-3">

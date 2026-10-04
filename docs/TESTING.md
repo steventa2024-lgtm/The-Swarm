@@ -13,7 +13,7 @@ What to test, in a sensible order, and what "good" looks like. Each section list
 2. For live runs with local models: install Ollama, run `ollama serve`, and pull at least one coder model (e.g. `ollama pull qwen2.5-coder:7b`). Several different models make the auto-assign test more interesting.
 3. Automated checks (optional but quick):
    ```bash
-   npm test                    # 80 unit tests (incl. the live driver: Stop, Pause, token-saving)
+   npm test                    # 117 unit tests (adapters, live driver: Stop/Pause/retries/budget, previews…)
    cd src-tauri && cargo test  # 7 Rust tests (path safety, check detection)
    ```
 
@@ -117,6 +117,21 @@ After **Apply** succeeds, a **Verify the result** panel appears.
 
 This **runs your project's own scripts**, so only do it in projects you trust. Each run has a 3-minute timeout.
 
+## 6c. Budget guard and rate limits ⚠️ (needs a paid key to see for real)
+
+The guard counts **paid tokens only**; local models are free and never counted.
+
+| Check | Expected |
+| --- | --- |
+| Sidebar → "Paid usage" | Shows paid tokens used in the last 24 h against your limit. Fresh install: **0**. A local-only run doesn't move it |
+| Settings → Token budget → set **50,000**, mode **Strict**, run a task on a paid provider | The activity feed warns at 80%, then "Daily paid-token budget reached — stopping the run"; status ends **Stopped**; the sidebar bar turns amber then red |
+| Start another paid run while still over | Refuses to start: "Daily paid-token budget reached…" and spends nothing |
+| Same limit but a **local-only** run (Ollama) | Runs normally; never blocked |
+| Mode **Balanced** at the same limit | A single "Over the daily paid-token budget… continuing" warning; the run finishes |
+| Mode **Off** | No budget messages |
+
+If your provider rate-limits you (HTTP 429 / overloaded), the feed shows **"<provider> is busy … Retrying in Ns (1/3)"** and the worker recovers by itself. A wrong key (HTTP 401) should fail straight away, with no retries. Raise your limit back to something sensible when you're done testing.
+
 ## 7. Pause / Stop ✅
 
 During a live run:
@@ -158,6 +173,7 @@ Open an issue with:
 - [ ] Preview renders and is interactive
 - [ ] Review & apply writes only selected files; conflicts require a choice
 - [ ] Planner is the only paid model under Token saver ⚠️
+- [ ] Strict budget stops a paid run at the limit; a local run is never blocked ⚠️
 - [x] Pause / Resume / Stop behave (verified; re-check on your paid provider ⚠️)
 - [ ] Verify runs your project's tests and a failure offers "Ask the team to fix it"
 - [ ] Restart keeps your settings

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { DriverContext, RunController } from '@/engine/driver'
 import { liveDriver } from '@/engine/liveDriver'
 import { relevantNotes } from '@/engine/notes'
+import { paidTokens, usedLast24h } from '@/lib/budget'
 import { simulatedDriver } from '@/engine/simulator'
 import type { Run, RunMode, RunStatus, Template } from '@/types'
 import { useApp } from './app'
@@ -20,6 +21,8 @@ interface SwarmState {
   attachments: string[]
   selectedId: string | null
   applyOpen: boolean
+  /** True when the current run calls real providers (so its tokens count toward the budget). */
+  runIsLive: boolean
 
   setApplyOpen: (open: boolean) => void
   /** Adds (or updates) a real check result on the final output. */
@@ -49,6 +52,7 @@ export const useSwarm = create<SwarmState>()((set, get) => ({
   attachments: [],
   selectedId: null,
   applyOpen: false,
+  runIsLive: false,
 
   setApplyOpen: (applyOpen) => set({ applyOpen }),
   recordCheck: (label, passed) =>
@@ -96,6 +100,9 @@ export const useSwarm = create<SwarmState>()((set, get) => ({
       maxWorkers: app.preferences.maxConcurrency,
       getSpeed: () => useApp.getState().preferences.simulationSpeed,
       warmupMs: opts?.warmupMs,
+      budget: live
+        ? { mode: app.preferences.tokenBudgetMode, limit: app.preferences.tokenBudget, usedBefore: usedLast24h(app.history) }
+        : undefined,
     }
     let prevStatus: RunStatus | null = null
     controller = driver.start(
@@ -108,13 +115,14 @@ export const useSwarm = create<SwarmState>()((set, get) => ({
             id: run.id, title: run.task.title, projectId: run.task.projectId, mode: run.task.mode,
             status: run.status, agentCount: run.workers.length - 2, durationMs: run.elapsedMs,
             tokens: run.metrics.tokensIn + run.metrics.tokensOut, costUsd: run.metrics.costUsd,
+            paidTokens: paidTokens(run.metrics, app.providers), simulated: !live,
             startedAt: run.startedAt,
           })
         }
         prevStatus = run.status
       },
     )
-    set({ prompt: '', selectedId: null, applyOpen: false })
+    set({ prompt: '', selectedId: null, applyOpen: false, runIsLive: live })
   },
   pause: () => controller?.pause(),
   resume: () => controller?.resume(),

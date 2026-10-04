@@ -4,6 +4,7 @@ import { DonutChart } from '@/components/common/DonutChart'
 import { MetricCard } from '@/components/common/MetricCard'
 import { ProgressBar } from '@/components/common/ProgressBar'
 import { Sparkline } from '@/components/common/Sparkline'
+import { paidTokens } from '@/lib/budget'
 import { formatCost, formatDuration, formatTokens, timeAgo } from '@/lib/utils'
 import { useApp } from '@/store/app'
 import type { Run } from '@/types'
@@ -16,6 +17,7 @@ export function MetricsRow({ run }: { run: Run | null }) {
   const budget = useApp((s) => s.preferences.tokenBudget)
   const m = run?.metrics
   const total = m ? m.tokensIn + m.tokensOut : 0
+  const paid = paidTokens(m, providers)
 
   const slices = useMemo(
     () =>
@@ -54,9 +56,9 @@ export function MetricsRow({ run }: { run: Run | null }) {
           <div>
             <Sparkline data={m?.costSeries ?? [0, 0]} color="#7dd3fc" height={26} />
             <div className="mt-1.5 flex justify-between text-[10.5px] text-ink-3">
-              <span>Budget used</span><span className="font-mono">{Math.min(100, Math.round((total / budget) * 100))}%</span>
+              <span>Paid-token budget (this run)</span><span className="font-mono">{Math.min(100, Math.round((paid / budget) * 100))}%</span>
             </div>
-            <ProgressBar value={(total / budget) * 100} color="#7dd3fc" className="mt-1" height={3} />
+            <ProgressBar value={(paid / budget) * 100} color="#7dd3fc" className="mt-1" height={3} />
           </div>
         }
       />

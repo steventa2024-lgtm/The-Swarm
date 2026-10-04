@@ -79,8 +79,11 @@ export function SettingsPage() {
           </Row>
         </Section>
 
-        <Section title="Token budget" description="A guard against runaway spend, tracked per rolling 24 hours.">
-          <Row label="Budget mode">
+        <Section title="Token budget" description="Limits paid API usage over a rolling 24 hours. Tokens from local models (Ollama, llama.cpp) are free and never counted.">
+          <Row
+            label="Budget mode"
+            hint={prefs.tokenBudgetMode === 'strict' ? "A live run that reaches the limit is stopped, and a paid run won't start once it's used up." : prefs.tokenBudgetMode === 'balanced' ? 'Warns at 80% and 100%, but never interrupts a run.' : 'No limit is applied.'}
+          >
             <Segmented size="sm" value={prefs.tokenBudgetMode} onChange={p('tokenBudgetMode')} options={[{ value: 'strict', label: 'Strict' }, { value: 'balanced', label: 'Balanced' }, { value: 'unlimited', label: 'Off' }]} />
           </Row>
           <Row label="Daily token budget" hint={`${formatTokens(prefs.tokenBudget)} tokens`}>
