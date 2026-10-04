@@ -13,7 +13,7 @@ What to test, in a sensible order, and what "good" looks like. Each section list
 2. For live runs with local models: install Ollama, run `ollama serve`, and pull at least one coder model (e.g. `ollama pull qwen2.5-coder:7b`). Several different models make the auto-assign test more interesting.
 3. Automated checks (optional but quick):
    ```bash
-   npm test                    # 117 unit tests (adapters, live driver: Stop/Pause/retries/budget, previews…)
+   npm test                    # 149 unit tests (adapters, live driver: Stop/Pause/retries/budget, saved runs, redaction, previews…)
    cd src-tauri && cargo test  # 7 Rust tests (path safety, check detection)
    ```
 
@@ -117,6 +117,18 @@ After **Apply** succeeds, a **Verify the result** panel appears.
 
 This **runs your project's own scripts**, so only do it in projects you trust. Each run has a 3-minute timeout.
 
+## 6d. History & saved runs ✅
+
+1. Finish a **live** run (simulated runs aren't saved). Open **History** in the top bar: it appears in the list with its project, time and file count.
+2. Close the app completely and reopen it. **History** still lists the run.
+3. Click it. The graph, workers, **Preview** and **Code** tabs all show that run, and **Review & apply** works on it.
+4. Safety checks:
+   - Put a fake key such as `sk-proj-abcdefghijklmnopqrstuvwxyz0123456789` in a prompt. In the reopened run the prompt shows `[REDACTED]` (Settings → *Redact secrets in saved runs* must be on, which is the default).
+   - Code the agents wrote is left as written, apart from unmistakable keys.
+   - **History** is disabled while a run is in progress.
+   - Hover a saved run and click the bin to delete it. Settings → Data & privacy → **Delete all** removes every saved run.
+   - Turn **Save finished runs** off, finish a run, and confirm it isn't added.
+
 ## 6c. Budget guard and rate limits ⚠️ (needs a paid key to see for real)
 
 The guard counts **paid tokens only**; local models are free and never counted.
@@ -174,6 +186,7 @@ Open an issue with:
 - [ ] Review & apply writes only selected files; conflicts require a choice
 - [ ] Planner is the only paid model under Token saver ⚠️
 - [ ] Strict budget stops a paid run at the limit; a local run is never blocked ⚠️
+- [ ] A finished run can be reopened from History after restarting the app
 - [x] Pause / Resume / Stop behave (verified; re-check on your paid provider ⚠️)
 - [ ] Verify runs your project's tests and a failure offers "Ask the team to fix it"
 - [ ] Restart keeps your settings

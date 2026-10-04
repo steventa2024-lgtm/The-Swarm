@@ -229,14 +229,18 @@ export const liveDriver: OrchestratorDriver = {
     const refreshFiles = () => {
       const files: FileChange[] = []
       for (const w of workers) {
-        const parsed = parseFiles(outputs.get(w.id) ?? '')
-        w.activeFiles = parsed.slice(-2).map((f) => f.path).reverse()
-        w.additions = parsed.reduce((s, f) => s + f.lines, 0)
-        w.deletions = 0
-        for (const f of parsed) {
+        // A model may emit the same file more than once (small ones often loop). Within one worker, the last
+        // version of a path wins — otherwise repeats look like a conflict between agents and inflate the counts.
+        const latest = new Map<string, { path: string; lines: number; content: string }>()
+        for (const f of parseFiles(outputs.get(w.id) ?? '')) {
           const path = cleanPath(f.path)
-          if (path) files.push({ path, type: 'added', additions: f.lines, deletions: 0, workerId: w.id, role: w.role, content: f.content })
+          if (path) { latest.delete(path); latest.set(path, { ...f, path }) } // delete+set keeps "most recent last" order
         }
+        const unique = [...latest.values()]
+        w.activeFiles = unique.slice(-2).map((f) => f.path).reverse()
+        w.additions = unique.reduce((s, f) => s + f.lines, 0)
+        w.deletions = 0
+        for (const f of unique) files.push({ path: f.path, type: 'added', additions: f.lines, deletions: 0, workerId: w.id, role: w.role, content: f.content })
       }
       run.fileChanges = files
       run.metrics.filesChanged = files.length

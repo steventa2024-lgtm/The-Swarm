@@ -1,5 +1,5 @@
 import { RotateCcw } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input, Select } from '@/components/ui/fields'
@@ -7,6 +7,7 @@ import { Segmented } from '@/components/ui/segmented'
 import { Switch } from '@/components/ui/switch'
 import { MODE_META } from '@/lib/meta'
 import { formatTokens } from '@/lib/utils'
+import { clearRuns, listRuns } from '@/persistence/runStore'
 import { useApp } from '@/store/app'
 import { useSwarm } from '@/store/swarm'
 import type { Preferences, RunMode } from '@/types'
@@ -39,6 +40,8 @@ export function SettingsPage() {
   const providers = useApp((s) => s.providers)
   const updateProvider = useApp((s) => s.updateProvider)
   const resetData = useApp((s) => s.resetData)
+  const [saved, setSaved] = useState<number | null>(null)
+  useEffect(() => { listRuns().then((l) => setSaved(l.length)).catch(() => setSaved(0)) }, [])
   const p = <K extends keyof Preferences>(k: K) => (v: Preferences[K]) => set({ [k]: v } as Partial<Preferences>)
 
   return (
@@ -104,8 +107,11 @@ export function SettingsPage() {
         </Section>
 
         <Section title="Data & privacy">
-          <Row label="Keep run logs" hint="Stores activity logs with run history."><Switch checked={prefs.storeRunLogs} onCheckedChange={p('storeRunLogs')} /></Row>
-          <Row label="Redact secrets in logs" hint="Masks tokens and keys before anything is stored."><Switch checked={prefs.redactSecrets} onCheckedChange={p('redactSecrets')} /></Row>
+          <Row label="Save finished runs" hint="Keeps each finished live run (its files, activity and result) so you can reopen it from History. The newest 25 are kept; turning this off stops saving but doesn't delete what's saved."><Switch checked={prefs.storeRunLogs} onCheckedChange={p('storeRunLogs')} /></Row>
+          <Row label="Redact secrets in saved runs" hint="Masks API keys and tokens before a run is saved. Code the agents wrote is only changed where it contains an unmistakable key."><Switch checked={prefs.redactSecrets} onCheckedChange={p('redactSecrets')} /></Row>
+          <Row label="Saved runs" hint={saved === null ? '…' : `${saved} saved on this device`}>
+            <Button variant="danger" size="sm" disabled={!saved} onClick={async () => { if (window.confirm('Delete all saved runs? This cannot be undone.')) { await clearRuns(); setSaved(0) } }}>Delete all</Button>
+          </Row>
           <Row label="Usage telemetry" hint="Off by default. This build sends nothing either way."><Switch checked={prefs.telemetry} onCheckedChange={p('telemetry')} /></Row>
           <Row label="Reset local data" hint="Restores seed projects, agents, templates and history.">
             <Button variant="danger" size="sm" onClick={() => { if (window.confirm('Reset all local data to defaults?')) { resetData(); useSwarm.getState().reset() } }}><RotateCcw className="h-3.5 w-3.5" />Reset</Button>

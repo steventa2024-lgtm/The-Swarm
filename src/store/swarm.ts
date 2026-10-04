@@ -4,6 +4,7 @@ import { liveDriver } from '@/engine/liveDriver'
 import { relevantNotes } from '@/engine/notes'
 import { paidTokens, usedLast24h } from '@/lib/budget'
 import { simulatedDriver } from '@/engine/simulator'
+import { saveRun } from '@/persistence/runStore'
 import type { Run, RunMode, RunStatus, Template } from '@/types'
 import { useApp } from './app'
 
@@ -25,6 +26,8 @@ interface SwarmState {
   runIsLive: boolean
 
   setApplyOpen: (open: boolean) => void
+  /** Shows a previously saved run (read-only history). Ignored while a run is in progress. */
+  openRun: (run: Run) => boolean
   /** Adds (or updates) a real check result on the final output. */
   recordCheck: (label: string, passed: boolean) => void
   /** Puts a prepared prompt in the task box and returns to the Swarm view. */
@@ -55,6 +58,14 @@ export const useSwarm = create<SwarmState>()((set, get) => ({
   runIsLive: false,
 
   setApplyOpen: (applyOpen) => set({ applyOpen }),
+  openRun: (run) => {
+    const cur = get().run
+    if (cur && ['planning', 'running', 'reviewing', 'paused'].includes(cur.status)) return false
+    controller?.dispose()
+    controller = null
+    set({ run, runIsLive: false, selectedId: null, applyOpen: false })
+    return true
+  },
   recordCheck: (label, passed) =>
     set((s) => {
       const out = s.run?.finalOutput
@@ -111,6 +122,9 @@ export const useSwarm = create<SwarmState>()((set, get) => ({
       (run) => {
         set({ run })
         if (opts?.record !== false && TERMINAL.includes(run.status) && prevStatus && !TERMINAL.includes(prevStatus)) {
+          // Keep the full result (files, events) so it can be reopened later — only if the user hasn't turned that off.
+          const prefs = useApp.getState().preferences
+          if (live && prefs.storeRunLogs) void saveRun(run, { redact: prefs.redactSecrets }).catch((e) => console.warn('[ZeroPulse] could not save run', e))
           useApp.getState().pushHistory({
             id: run.id, title: run.task.title, projectId: run.task.projectId, mode: run.task.mode,
             status: run.status, agentCount: run.workers.length - 2, durationMs: run.elapsedMs,

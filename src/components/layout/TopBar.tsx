@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/common/StatusBadge'
 import { previewableFiles } from '@/components/swarm/PreviewPane'
 import { looksPreviewable } from '@/preview/build'
 import { RunControlBar } from '@/components/swarm/RunControlBar'
+import { RunHistoryMenu } from '@/components/swarm/RunHistoryMenu'
 import { Select } from '@/components/ui/fields'
 import { Segmented } from '@/components/ui/segmented'
 import type { PageId } from '@/types'
@@ -76,6 +77,7 @@ export function TopBar() {
             {formatDuration(run?.elapsedMs ?? 0)}
           </div>
           <RunControlBar />
+          <RunHistoryMenu />
           <Segmented
             size="sm"
             value={view}

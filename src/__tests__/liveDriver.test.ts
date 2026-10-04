@@ -14,6 +14,8 @@ const calls: { role: 'planner' | 'worker' | 'reviewer'; messages: ChatRequest['m
 let plannerSkips: string[] = []
 /** How many upcoming worker calls should fail, and with what message. */
 let failures = 0
+/** When set, workers emit this exact text instead of the default single file. */
+let workerText: string | null = null
 let failMessage = 'HTTP 429: {"error":{"message":"Rate limit reached. Please try again in 20ms"}}'
 
 /** A fake provider: slow, streams text, and honours abort like the real transport. */
@@ -40,7 +42,7 @@ vi.mock('@/providers', () => ({
       } else if (role === 'reviewer') {
         text = JSON.stringify({ verdict: 'approve', summary: ['ok'], issues: [], nextSteps: [] })
       } else {
-        text = 'Summary of approach.\n\n### FILE: out.js\n```js\nconsole.log(1)\n```\n'
+        text = workerText ?? 'Summary of approach.\n\n### FILE: out.js\n```js\nconsole.log(1)\n```\n'
       }
       const slow = role === 'worker' ? 25 : 5
       const pieces = text.match(/[\s\S]{1,20}/g) ?? []
@@ -72,7 +74,7 @@ const start = () => liveDriver.start(req(), ctx(), (r) => { latest = r })
 const until = async (cond: () => boolean, ms = 6000) => { const t = Date.now(); while (Date.now() - t < ms) { if (cond()) return true; await sleep(20) } return false }
 const workersWorking = () => latest?.workers.slice(1, -1).filter((w) => w.status === 'working').length ?? 0
 
-beforeEach(() => { calls.length = 0; plannerSkips = []; failures = 0; failMessage = 'HTTP 429: {"error":{"message":"Rate limit reached. Please try again in 20ms"}}'; latest = null })
+beforeEach(() => { calls.length = 0; plannerSkips = []; failures = 0; workerText = null; failMessage = 'HTTP 429: {"error":{"message":"Rate limit reached. Please try again in 20ms"}}'; latest = null })
 afterEach(() => { vi.restoreAllMocks() })
 
 describe('live driver — token-saving behaviour', () => {
@@ -295,5 +297,23 @@ describe('live driver — daily paid-token budget', () => {
     expect(await until(finishedOrStopped, 8000)).toBe(true)
     expect(latest!.status).toBe('completed')
     expect(latest!.events.some((e) => /budget/i.test(e.message))).toBe(false)
+  })
+})
+
+describe('live driver — a model that repeats itself', () => {
+  const FENCE = '```'
+  const block = (path: string, body: string) => `### FILE: ${path}\n${FENCE}js\n${body}\n${FENCE}\n`
+
+  it('collapses repeated blocks for the same path to the latest version (not a fake conflict)', async () => {
+    workerText = 'Summary.\n\n' + block('app.js', 'version 1') + block('app.js', 'version 2') + block('app.js', 'version 3') + block('other.js', 'x')
+    start()
+    expect(await until(() => latest?.status === 'completed')).toBe(true)
+    for (const w of latest!.workers.slice(1, -1)) {
+      const mine = latest!.fileChanges.filter((f) => f.workerId === w.id)
+      expect(mine.map((f) => f.path).sort()).toEqual(['app.js', 'other.js']) // each path once
+      expect(mine.find((f) => f.path === 'app.js')!.content).toContain('version 3') // latest wins
+      expect(w.additions).toBe(2) // one line each, not four
+    }
+    expect(latest!.metrics.filesChanged).toBe(latest!.fileChanges.length)
   })
 })

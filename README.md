@@ -25,6 +25,7 @@ Big prompts burn tokens. Sending the whole thing to one expensive model is slow 
 | **Swarm** | Task box (agent count, run mode), live orchestration graph, worker cards, activity feed, file changes, token / cost / provider metrics. Views: **Graph**, **Timeline**, **Preview**. |
 | **Preview** | Renders what the agents built, updating as each finishes. Static HTML/CSS/JS and React/TSX. Desktop / tablet / phone widths, error banner, and a Code tab. |
 | **Review & apply** | Compare every proposed file against your real files as a diff, resolve files several agents wrote, then write the ones you pick into your project folder. |
+| **History** | Every finished live run is saved (its files, activity and result). Reopen one from the **History** menu to see its graph, preview it, re-apply it or verify it again. The newest 25 are kept; secrets are masked before saving. |
 | **Verify & fix** | After applying, run the project's own tests / build / lint (or a JS syntax check) and see the real output. If one fails, **Ask the team to fix it** prepares a fix prompt from the failure. |
 | **Agents** | Auto-assign models by strength, per-agent model, editable **skill** (standing instructions), capabilities, enable/disable. |
 | **Integrations** | Test & connect providers (Ollama, llama.cpp, OpenAI-compatible, OpenRouter, Anthropic); store API keys securely. |
@@ -88,9 +89,9 @@ src/
     blueprints.ts    Placeholder plans used by the simulator
   providers/         OpenAI-compatible + Anthropic adapters, SSE parser, transport, connection test
   preview/build.ts   Turns proposed files into a runnable preview (HTML, or TSX via sucrase + import map)
-  lib/               diff, checks runner + secrets + file-access bridges, formatting helpers
+  lib/               diff, budget, redaction, checks runner + secrets + file-access bridges, helpers
   store/             Zustand: persisted workspace data, live run state
-  persistence/       SQLite (desktop) or localStorage (browser)
+  persistence/       SQLite (desktop) or localStorage (browser); runStore.ts saves finished runs
   components/ pages/ UI (shadcn-style primitives, graph, rails, dialogs, 8 pages)
   __tests__/         Vitest suites
 src-tauri/
@@ -119,12 +120,13 @@ docs/TESTING.md     What to test, in what order, and what "good" looks like
 - **File access** is limited to project folders you pick in the native dialog. Approval is enforced in Rust and persisted; paths with `..`, absolute paths, symlink escapes and `.git` are rejected.
 - **Previews** run in a sandboxed iframe served from a loopback port on its own origin, with a CSP that blocks the page from making its own network requests. Generated code cannot reach the app, its storage or its IPC.
 - **Live runs send your prompt (and any related project notes) to the providers you verified.** Use *Local Only* mode, or only connect local providers, to keep everything on your machine.
+- **Saved runs** are stored locally (SQLite), never sent anywhere. With *Redact secrets* on (the default), API keys, tokens and private keys are masked in prompts, logs and files before a run is saved. Ordinary code is left as written, so a saved run can still be re-applied. You can turn saving off or delete everything in Settings → Data & privacy.
 - **Running checks** executes your project's own scripts, so it is a deliberate, per-click action. The UI shows the exact script text first. The webview can only choose from a fixed menu (`npm run test|typecheck|lint|build|check`, `cargo check|test`, `pytest`, a JS syntax check) in an approved folder — it can never send a command line. Every run has a 3-minute timeout and a Stop button that kills the whole process tree.
 - Ollama "cloud" models are hidden from local providers because they leave the machine.
 
 ## What is and isn't verified
 
-**Verified in the real desktop app:** live runs against Ollama (plan, parallel build, review), Pause / Resume / Stop, auto-assign, token-saving skip of idle roles, key storage and bridge, preview of static pages and React pages, the confined file read/apply flow, conflict handling, the release build and Desktop launch. 117 unit tests and 7 Rust tests pass.
+**Verified in the real desktop app:** live runs against Ollama (plan, parallel build, review), Pause / Resume / Stop, auto-assign, token-saving skip of idle roles, key storage and bridge, preview of static pages and React pages, the confined file read/apply flow, conflict handling, the release build and Desktop launch. 149 unit tests and 7 Rust tests pass.
 
 **Not verified yet:**
 - **OpenAI, OpenRouter and Anthropic adapters** with real keys. Request shape, auth headers, streaming, usage and error handling are covered by unit tests against the documented protocols, but no real request has been made.
