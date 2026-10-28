@@ -16,8 +16,8 @@ Branch: `feat/hardlight-command-center`. Starting checkpoint `2f22ff7`; communic
 | DeepSeek | MOCK-TESTED / BLOCKED credential | Native vault entry, fixed endpoint, model/balance path, egress/session gates, SSE parser, cancellation, reservations and breaker implemented. No key, authenticated balance or chargeable inference was supplied/claimed. Paid use remains OFF. |
 | Telegram six existing identities | VERIFIED LIVE | All six getMe checks and pollers succeeded in the upgraded app. Existing numeric owner/private-group pairing retained; eight-slot migration preserves original records. |
 | Natural Telegram messages | VERIFIED LIVE | Real task-start, assignment, completion and reviewer outcome deliveries have native sent receipts. One origin per event; IDs remain desktop audit data. |
-| Own-window video | VERIFIED LOCAL / Telegram VERIFIED LIVE | Native PrintWindow capture + FFmpeg produced a real **15.000 s**, **1496×978**, **H.264 / yuv420p** MP4 (147,341 bytes). First and middle frames inspected; middle frame shows red capture indicator + Stop control. Native `sendVideo` receipt succeeded. Phone playback awaits Zero's confirmation. |
-| Screenshot / safe report upload | MANUAL pending final live check | Native scoped PNG capture, SHA-256 snapshot registry and photo/document upload paths implemented. Do not infer phone receipt from a local file. |
+| Own-window video | VERIFIED LOCAL / Telegram VERIFIED LIVE | Native PrintWindow capture + FFmpeg produced a real **15.000 s**, **1496×978**, **H.264 / yuv420p** MP4 (147,341 bytes). First and middle frames inspected; middle frame shows red capture indicator + Stop control. Native `sendVideo` receipt succeeded. Phone playback awaits Zero's confirmation. New media deliveries include an owner-authorized Confirm received button. |
+| Screenshot / safe report upload | VERIFIED LIVE document / MANUAL screenshot | Native `sendDocument` accepted the safe public policy report. Scoped PNG capture, SHA-256 registry and `sendPhoto` are implemented; the final preview screenshot awaits the native consent dialog. No photo receipt is claimed until actually sent. |
 | Model controls / queues | VERIFIED LOCAL | Tested precedence, unavailable-lock refusal, one-provider FIFO and cancellation, native per-task/day starts, invocation-scoped args and unsupported-effort rejection. Remaining provider allowance is unavailable, not fabricated. |
 | Multi-project recovery | VERIFIED LOCAL | Two project slots, distinct-root guard, per-provider queues and durable flight frames. Interrupted projects recover as stopped; no automatic tools/approval replay. |
 | Hardlight / responsive UI | VERIFIED LOCAL | Eight actual assets; idle/offline/live state bridge; inspector; Preview gallery; Off/Subtle/Cinematic; reduced-motion and offscreen pause. Four browser sizes passed. Native executable viewed directly. Static concept art, not rigged 3D. |
@@ -27,10 +27,10 @@ Branch: `feat/hardlight-command-center`. Starting checkpoint `2f22ff7`; communic
 ## Current checks
 
 - Baseline: 192 TypeScript passed / 1 skipped; 41 Rust passed / 1 ignored.
-- Full upgraded TypeScript suite: 198 passed / 1 skipped before the final additional multi-project recovery test. Final count is recorded after that run below.
+- Full upgraded TypeScript suite: 198 passed / 1 skipped before the final recovery test; the final full rerun passed **199 / 1 skipped (200 total)**.
 - Rust: **52 passed / 2 ignored**. One ignored test performs subscription inference; the other requires installed signed-in metadata discovery and was separately run: **1 passed**, 8 models returned, no inference.
 - Typecheck + Vite production build and Windows Tauri development compilation pass. Vite reports a non-fatal large-bundle warning (~957 KB JS before gzip).
-- Existing UI smoke, Telegram UI smoke, and new Hardlight responsive smoke all passed before the last Approvals/History navigation addition; final rerun is recorded below.
+- Existing UI smoke, Telegram UI smoke, and new Hardlight responsive smoke all passed after the final Approvals/History navigation addition. Preview and Telegram smoke checks were also repeated after the last media-receipt change.
 - Browser layouts: 1440×900, 1920×1080, 1536×864 CSS area (125% scaling equivalent), 1024×768. This does not claim a separate native Windows DPI-setting test. Native desktop was inspected at its actual current size.
 - Independent fixture acceptance: **6 passed** against exported reviewed copies, with actual browser rendering. The first fixture failed the explicit Zero-authority check; it was corrected through another real two-worker/reviewer run. No failing acceptance result was hidden.
 
@@ -44,6 +44,6 @@ Representative delivered templates from the real workflow include “Zero, work 
 
 ## Artifacts and manual gates
 
-Executable: `artifacts/The Swarm Hardlight.exe`. The final binary SHA-256 and delivery/owner decisions are recorded after packaging. Preserve the prior Telegram executable. Browser evidence: `artifacts/hardlight/{dashboard,models,gallery}-*.png`. Native clip: `artifacts/hardlight/swarm-demo-15s.mp4`; inspected frames `native-capture-frame.png` and `native-recording-indicator.png`.
+Executable: `artifacts/The Swarm Hardlight.exe`. Final source checkpoint: `5a44c5d`. Binary SHA-256: `67503AB0E0DD0B8E707E3010F54A54EC5F6A5B378CC1A95C0CEE99C8478A9B4A`. Native `sendDocument` receipt for the 554-byte public policy report also succeeded. Preserve the prior Telegram executable. Browser evidence: `artifacts/hardlight/{dashboard,models,gallery}-*.png`. Native clip: `artifacts/hardlight/swarm-demo-15s.mp4`; inspected frames `native-capture-frame.png` and `native-recording-indicator.png`.
 
 Remaining owner actions: confirm phone media playback; decide the harmless rejection probe and exact fixture proposal; confirm native high-risk apply only if desired. DeepSeek key entry and first paid authorization remain entirely optional. See the dedicated setup and rollback documents. Fixed native subscription ceilings and disabled external MCP are explicit release limitations, not claimed finished provider integrations.
