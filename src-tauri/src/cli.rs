@@ -18,7 +18,7 @@ fn arguments(provider: &str, policy: &Path) -> Result<(&'static str, Vec<String>
         "codex" => ("codex", vec!["exec", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--sandbox", "read-only", "--skip-git-repo-check", "--json", "-c", "forced_login_method=\"chatgpt\"", "-c", "approval_policy=\"never\"", "--disable", "shell_tool", "--disable", "apply_patch_freeform", "-c", "mcp_servers={}", "-"]),
         "claude-code" => ("claude", vec!["-p", "--safe-mode", "--tools", "", "--disallowedTools", "mcp__*", "--strict-mcp-config", "--no-session-persistence", "--output-format", "json"]),
         "gemini-cli" => ("gemini", vec!["--prompt", "Follow the request on stdin. Return proposed text only.", "--output-format", "json", "--approval-mode", "plan", "--policy", policy.to_str().ok_or("Invalid policy path")?]),
-        "cursor-cli" => ("agent", vec!["--print", "--mode", "ask", "--output-format", "json"]),
+        "cursor-cli" => ("agent", vec!["--trust", "--print", "--mode", "ask", "--output-format", "json"]),
         _ => return Err("Unsupported CLI. Grok has no verified subscription adapter; paid API fallback is disabled.".into()),
     };
     Ok((program, args.into_iter().map(String::from).collect()))
@@ -137,6 +137,20 @@ pub fn cli_cancel(request_id: String, state: State<'_, CliRuns>) { if let Some(f
     use super::*;
     #[test] fn rejects_arbitrary_programs() { assert!(arguments("powershell", Path::new("policy")).is_err()); }
     #[test] fn safety_flags_are_fixed() { let (_, a) = arguments("codex", Path::new("policy")).unwrap(); assert!(a.contains(&"read-only".into())); assert!(!a.contains(&"--full-auto".into())); let (_, c) = arguments("claude-code", Path::new("policy")).unwrap(); assert!(c.windows(2).any(|w| w == ["--tools", ""])); }
+    #[test] fn cursor_trust_preserves_proposal_only_guards() {
+        let (program, args) = arguments("cursor-cli", Path::new("policy")).unwrap();
+        assert_eq!(program, "agent");
+        assert!(args.contains(&"--trust".into()));
+        assert!(args.windows(2).any(|w| w == ["--mode", "ask"]));
+        for unsafe_flag in ["--force", "-f", "--yolo", "--approve-mcps"] {
+            assert!(!args.iter().any(|arg| arg == unsafe_flag));
+        }
+        let policy: Value = serde_json::from_str(CURSOR_POLICY).unwrap();
+        assert!(policy["permissions"]["allow"].as_array().unwrap().is_empty());
+        for denied in ["Shell(*)", "Write(**)", "Read(**)", "WebFetch(*)", "Mcp(*:*)"] {
+            assert!(policy["permissions"]["deny"].as_array().unwrap().iter().any(|rule| rule == denied));
+        }
+    }
     #[test] fn reads_real_usage() { let r = parse_result("codex", "{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"ok\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":42,\"output_tokens\":3}}").unwrap(); assert_eq!(r.input_tokens, Some(42)); }
     #[test] fn errors_never_count_as_success() { assert!(parse_result("claude-code", "{\"is_error\":true,\"result\":\"login required\"}").is_err()); assert!(parse_result("codex", "{}").is_err()); }
     #[test] #[ignore = "Uses signed-in subscriptions; explicitly opt in"]
