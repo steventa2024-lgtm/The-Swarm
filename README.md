@@ -52,14 +52,14 @@ Verified on this host during the upgrade:
 - **Ollama:** real planner → two workers → reviewer passed with `qwen2.5-coder:7b`; recording in `public/demo-run.json`.
 - **Codex:** a real readiness response succeeded with ChatGPT authentication.
 - **Claude:** authenticated with Pro, but inference hit the weekly usage limit. The CLI reported reset **October 29, 2026 at 3 p.m. America/Los_Angeles**. No paid API fallback was attempted.
-- **Gemini CLI / Cursor Agent CLI:** not installed here; adapters implemented but real inference unverified. The Cursor desktop editor is installed.
+- **Cursor Agent CLI:** installed and signed in; the approved scratch-directory trust fix passed a real readiness probe. Model Control now requires Zero's confirmation of included usage for a discovered Cursor-owned model before further inference. **Google / Antigravity:** installed tooling was identified, but authenticated proposal-only use is unverified. See the current [verification report](docs/swarm-upgrade-verification.md).
 - **Grok AI:** manual only. **Telegram:** six real bot identities verified and polling; Zero and the private headquarters group paired. HQ/Codex message receipts and harmless owner approvals are verified in both private and group chats. No project files were applied by these checks.
 
 Official references: [Codex auth](https://developers.openai.com/codex/auth), [Codex noninteractive](https://developers.openai.com/codex/noninteractive), [Claude CLI](https://code.claude.com/docs/en/cli-reference), [Gemini auth](https://geminicli.com/docs/get-started/authentication/), [Gemini policies](https://geminicli.com/docs/reference/policy-engine/), [Cursor headless](https://cursor.com/docs/cli/headless).
 
 ## Optional Telegram setup
 
-The dedicated **Telegram** page has HQ, Codex, Claude, Gemini, Cursor, Grok and a reserved Ollama slot. Use your existing bots; no bot creation is needed. **Local long polling** is the default transport. It requires no domain, tunnel, hosting, or paid service.
+The dedicated **Telegram Bots** page has HQ, Codex, Claude, Gemini, Cursor, Grok and reserved Ollama and DeepSeek slots. Use your existing bots; no bot creation is needed. **Local long polling** is the default transport. It requires no domain, tunnel, hosting, or paid service.
 
 1. Save HQ's token in its masked credential field, **Test connection** against Telegram `getMe`, then **Start polling**. Repeat for each existing agent bot. Cursor and Grok's provisional identities require native confirmation if the actual username differs.
 2. Choose **Pair Zero**, send the one-time command in HQ's private chat, and confirm your captured numeric identity natively. Pair the selected private group using the bot-addressed command shown on screen.
