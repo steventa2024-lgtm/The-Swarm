@@ -14,6 +14,8 @@ export type ProviderKind =
 export type ModelTier = 'frontier' | 'balanced' | 'fast' | 'local'
 
 export interface ModelInfo {
+  efforts?: string[]
+  verifiedAt?: number
   id: string
   label: string
   tier: ModelTier
@@ -87,6 +89,9 @@ export interface ChecklistItem {
 
 /** A live agent instance inside a run. */
 export interface Worker {
+  requestedModel?: string
+  observedModel?: string
+  reasoningEffort?: string
   usageEstimated?: boolean
   id: string
   agentId: string
@@ -301,6 +306,8 @@ export interface Integration {
 }
 
 export interface Preferences {
+  modelPolicy?: import('@/engine/modelPolicy').ModelPolicy
+  mascotMotion?: 'off' | 'subtle' | 'cinematic'
   teamVersion?: number
   paidApisEnabled?: boolean
   personalities?: boolean
@@ -320,6 +327,8 @@ export interface Preferences {
 }
 
 export type PageId =
+  | 'models'
+  | 'mascots'
   | 'swarm'
   | 'projects'
   | 'agents'

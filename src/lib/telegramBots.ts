@@ -1,6 +1,6 @@
 import { inTauri } from '@/providers/transport'
 
-export type BotSlot = 'hq' | 'codex' | 'claude' | 'gemini' | 'cursor' | 'grok' | 'ollama'
+export type BotSlot = 'hq' | 'codex' | 'claude' | 'gemini' | 'cursor' | 'grok' | 'ollama' | 'deepseek'
 export type TelegramBotStatus = 'not_configured' | 'credentials_saved' | 'verified' | 'listening' | 'offline' | 'error'
 export interface BotPermissions { notifications: boolean; commands: boolean; approvals: boolean; testMessages: boolean }
 export interface TelegramBotConfig { id: BotSlot; name: string; role: string; expectedUsername: string; permissions: BotPermissions; style: string }
@@ -27,6 +27,7 @@ const identities: Array<[BotSlot, string, string, string, string]> = [
   ['gemini', 'Gemini', 'frontend', 'ZPSwarmGeminiBot', 'creative'],
   ['cursor', 'Cursor', 'qa', 'ZPSwarmCursorBot', 'meticulous'],
   ['grok', 'Grok', 'researcher', 'ZPSwarmGrokBot', 'witty'],
+  ['deepseek', 'DeepSeek', 'reviewer', '', 'professional'],
   ['ollama', 'Ollama', 'docs', '', 'practical'],
 ]
 

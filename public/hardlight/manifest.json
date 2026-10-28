@@ -1,0 +1,112 @@
+{
+  "collection": "THE SWARM — Hardlight Familiars",
+  "asset_status": "cropped, upscaled concept artwork; static PNG/JPG, not skeletal or frame animation",
+  "source": "Approved eight-character concept board (user-selected direction 03)",
+  "characters": [
+    {
+      "id": "hq",
+      "display_name": "Swarm HQ",
+      "concept": "golden holographic bee commander",
+      "color": "#F5BB52",
+      "role": "command-center",
+      "telegram_handle": "@ZeroPulseSwarmHQBot",
+      "avatar_png": "avatars_png/hq_512.png",
+      "avatar_jpg": "avatars_jpg/hq_512.jpg",
+      "portrait_png": "portraits/hq_portrait.png"
+    },
+    {
+      "id": "codex",
+      "display_name": "Codex",
+      "concept": "azure crystalline wolf guardian",
+      "color": "#42CCFF",
+      "role": "chief-engineer",
+      "telegram_handle": "@ZPSwarmCodexBot",
+      "avatar_png": "avatars_png/codex_512.png",
+      "avatar_jpg": "avatars_jpg/codex_512.jpg",
+      "portrait_png": "portraits/codex_portrait.png"
+    },
+    {
+      "id": "claude",
+      "display_name": "Claude",
+      "concept": "ember phoenix guardian",
+      "color": "#FF873D",
+      "role": "principal-software-engineer",
+      "telegram_handle": "@ZPSwarmClaudeBot",
+      "avatar_png": "avatars_png/claude_512.png",
+      "avatar_jpg": "avatars_jpg/claude_512.jpg",
+      "portrait_png": "portraits/claude_portrait.png"
+    },
+    {
+      "id": "gemini",
+      "display_name": "Gemini",
+      "concept": "violet-blue crystal fox",
+      "color": "#8181FF",
+      "role": "ui-ux-engineer",
+      "telegram_handle": "@ZPSwarmGeminiBot",
+      "avatar_png": "avatars_png/gemini_512.png",
+      "avatar_jpg": "avatars_jpg/gemini_512.jpg",
+      "portrait_png": "portraits/gemini_portrait.png"
+    },
+    {
+      "id": "cursor",
+      "display_name": "Cursor",
+      "concept": "amethyst cyber-cat",
+      "color": "#C16BFF",
+      "role": "qa-integration",
+      "telegram_handle": "@ZPSwarmCursorBot",
+      "avatar_png": "avatars_png/cursor_512.png",
+      "avatar_jpg": "avatars_jpg/cursor_512.jpg",
+      "portrait_png": "portraits/cursor_portrait.png"
+    },
+    {
+      "id": "grok",
+      "display_name": "Grok",
+      "concept": "jade-green techno-fox",
+      "color": "#54E8BA",
+      "role": "research-specialist",
+      "telegram_handle": "@ZPSwarmGrokBot",
+      "avatar_png": "avatars_png/grok_512.png",
+      "avatar_jpg": "avatars_jpg/grok_512.jpg",
+      "portrait_png": "portraits/grok_portrait.png"
+    },
+    {
+      "id": "deepseek",
+      "display_name": "DeepSeek",
+      "concept": "cyan light-whale",
+      "color": "#1CBFFF",
+      "role": "reasoning-architecture-auditor",
+      "telegram_handle": null,
+      "avatar_png": "avatars_png/deepseek_512.png",
+      "avatar_jpg": "avatars_jpg/deepseek_512.jpg",
+      "portrait_png": "portraits/deepseek_portrait.png"
+    },
+    {
+      "id": "ollama",
+      "display_name": "Ollama",
+      "concept": "soft cream llama with emerald crystals",
+      "color": "#97EA89",
+      "role": "local-operator",
+      "telegram_handle": null,
+      "avatar_png": "avatars_png/ollama_512.png",
+      "avatar_jpg": "avatars_jpg/ollama_512.jpg",
+      "portrait_png": "portraits/ollama_portrait.png"
+    }
+  ],
+  "status_map": {
+    "idle": "subtle floating, slow ambient halo",
+    "thinking": "orbiting data particles, gaze toward task",
+    "working": "animated code glyphs and directional light pulse",
+    "reviewing": "scanning light and small magnifier/progress cue",
+    "waiting_approval": "soft amber pulse and visible action label",
+    "completed": "brief celebratory glint, then back to idle",
+    "failed": "low-intensity red edge with readable error label",
+    "offline": "desaturated, motion stopped; clearly labeled"
+  },
+  "constraints": [
+    "Do not fake agent work status",
+    "Do not use paid art assets or animation APIs",
+    "respect prefers-reduced-motion",
+    "Do not claim static PNGs are rigged 3D animations",
+    "Only authorized verified Telegram identities may receive changes"
+  ]
+}

@@ -28,10 +28,18 @@ fn entry(name: &str) -> Result<Entry, String> {
     }
     Entry::new(SERVICE, name).map_err(|e| format!("Credential store unavailable: {e}"))
 }
+pub(crate) fn store_dedicated(name: &str,value: &str)->Result<(),String>{
+    if name!="DEEPSEEK_API_KEY" {return Err("Unknown dedicated credential".into())}
+    entry(name)?.set_password(value).map_err(|_|"OS credential store could not save key".into())
+}
+pub(crate) fn delete_dedicated(name:&str)->Result<(),String>{
+    if name!="DEEPSEEK_API_KEY" {return Err("Unknown dedicated credential".into())}
+    match entry(name)?.delete_credential(){Ok(())|Err(keyring::v1::Error::NoEntry)=>Ok(()),Err(_)=>Err("Cannot delete credential".into())}
+}
 
 pub(crate) fn managed_telegram_name(name: &str) -> bool {
     [
-        "HQ", "CODEX", "CLAUDE", "GEMINI", "CURSOR", "GROK", "OLLAMA",
+        "HQ", "CODEX", "CLAUDE", "GEMINI", "CURSOR", "GROK", "OLLAMA", "DEEPSEEK",
     ]
     .iter()
     .any(|id| name == format!("TELEGRAM_BOT_{id}_TOKEN"))
@@ -83,6 +91,7 @@ pub struct SecretStatus {
 
 #[tauri::command]
 pub fn secret_set(name: String, value: String) -> Result<(), String> {
+    if name=="DEEPSEEK_API_KEY" {return Err("Use the native DeepSeek masked key dialog".into())}
     if managed_telegram_name(&name) {
         return Err(
             "Use Telegram Bots to replace managed tokens and revoke their active sessions".into(),
@@ -117,6 +126,7 @@ pub fn secret_status(name: String) -> Result<SecretStatus, String> {
 
 #[tauri::command]
 pub fn secret_delete(name: String) -> Result<(), String> {
+    if name=="DEEPSEEK_API_KEY" {return Err("Use DeepSeek Delete to revoke session permission too".into())}
     if managed_telegram_name(&name) {
         return Err("Use Telegram Bots to revoke a managed token and its receiver".into());
     }

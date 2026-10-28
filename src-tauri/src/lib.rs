@@ -3,6 +3,10 @@ use tauri_plugin_sql::{Builder as SqlBuilder, Migration, MigrationKind};
 
 mod checks;
 mod communication;
+mod media;
+mod deepseek;
+mod deepseek_stream;
+mod capture;
 mod fs;
 mod preview;
 mod provider;
@@ -31,11 +35,14 @@ pub fn run() {
                 .add_migrations("sqlite:zeropulse.db", migrations)
                 .build(),
         )
+        .manage(deepseek::DeepSeek::default())
+        .manage(capture::CaptureState::default())
         .manage(provider::Inflight::default())
         .manage(provider::ApiPolicy::default())
         .manage(fs::ApprovedRoots::default())
         .manage(checks::RunningChecks::default())
         .manage(cli::CliRuns::default())
+        .manage(cli::Catalogs::default())
         .manage(approvals::ApprovalBook::default())
         .manage(telegram::Telegram::default())
         .manage(telegram_bots::TelegramBots::default())
@@ -57,6 +64,9 @@ pub fn run() {
             approvals::fs_stage,
             approvals::fs_get_staged,
             approvals::fs_apply,
+            cli::cli_confirm_included,
+            cli::cli_models,
+            cli::cli_usage,
             cli::cli_chat,
             cli::cli_cancel,
             telegram::telegram_status,
@@ -65,12 +75,28 @@ pub fn run() {
             telegram::telegram_request_approval,
             telegram::telegram_voice,
             telegram::telegram_send_voice,
+            capture::capture_evidence,
+            capture::capture_stop,
+            deepseek::deepseek_key_dialog,
+            deepseek::deepseek_status,
+            deepseek::deepseek_set_daily_limit,
+            deepseek::deepseek_test,
+            deepseek::deepseek_allow_project,
+            deepseek::deepseek_enable,
+            deepseek::deepseek_disable,
+            deepseek::deepseek_cancel,
+            deepseek::deepseek_delete,
+            deepseek::deepseek_chat,
+            media::media_list,
+            media::media_import,
+            telegram_bots::tg_send_media,
             telegram_bots::tg_dashboard,
             telegram_bots::tg_save_bot,
             telegram_bots::tg_set_token,
             telegram_bots::tg_remove_token,
             telegram_bots::tg_test_bot,
             telegram_bots::tg_start_bot,
+            telegram_bots::tg_reconnect_saved,
             telegram_bots::tg_stop_bot,
             telegram_bots::tg_delete_webhook,
             telegram_bots::tg_send_test,

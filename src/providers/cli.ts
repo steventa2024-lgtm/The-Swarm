@@ -17,10 +17,10 @@ export const cliAdapter: ProviderAdapter = {
     const cancel = () => { void invoke('cli_cancel', { requestId }) }
     req.signal?.addEventListener('abort', cancel, { once: true })
     try {
-      const result = await invoke<{ text: string; inputTokens: number | null; outputTokens: number | null }>('cli_chat', { provider: provider.id, requestId, prompt })
+      const result = await invoke<{ text: string; inputTokens: number | null; outputTokens: number | null; observedModel?: string }>('cli_chat', { provider: provider.id, requestId, prompt, model: req.model, effort: req.effort, runId: req.runId, timeoutSeconds: req.timeoutSeconds })
       if (req.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
       req.onDelta?.(result.text)
-      return { text: result.text, usage: { inputTokens: result.inputTokens ?? estimateTokens(prompt), outputTokens: result.outputTokens ?? estimateTokens(result.text), estimated: result.inputTokens === null || result.outputTokens === null } }
+      return { text: result.text, observedModel: result.observedModel, usage: { inputTokens: result.inputTokens ?? estimateTokens(prompt), outputTokens: result.outputTokens ?? estimateTokens(result.text), estimated: result.inputTokens === null || result.outputTokens === null } }
     } finally { req.signal?.removeEventListener('abort', cancel) }
   },
 }

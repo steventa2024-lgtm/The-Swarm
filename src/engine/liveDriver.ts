@@ -1,3 +1,4 @@
+import { resolveModel, providerQueue } from './modelPolicy'
 import { adapterFor, isAbort, type ChatResult } from '@/providers'
 import { skillFor } from '@/data/skills'
 import { ROLE_META } from '@/lib/meta'
@@ -321,6 +322,7 @@ export const liveDriver: OrchestratorDriver = {
     }
 
     /** Runs one model call for a worker, keeping its progress/tokens live. */
+    let calls = 0
     const call = async (
       w: Worker,
       messages: { role: 'system' | 'user'; content: string }[],
@@ -329,6 +331,14 @@ export const liveDriver: OrchestratorDriver = {
       opts: { json?: boolean; onText?: (full: string) => void } = {},
     ): Promise<ChatResult> => {
       throwIfAborted()
+      if (ctx.modelPolicy && calls >= ctx.modelPolicy.maxCalls) throw new Error('Task call cap reached. Proposal checkpoint retained; no new provider calls were started.')
+      if (ctx.modelPolicy) {
+        const agent = ctx.agents.find((a) => a.id === w.agentId)
+        if (!agent) throw new Error('Missing agent policy')
+        if (req.mode !== 'local-only' && w.providerId !== agent.providerId) throw new Error('Configured provider unavailable. Cross-provider fallback is blocked.')
+        const selected = resolveModel(req.mode === 'local-only' ? { ...agent, providerId: w.providerId, modelId: w.modelId } : agent, req.projectId, ctx.providers, ctx.modelPolicy)
+        w.modelId = selected.model; w.requestedModel = selected.model; w.reasoningEffort = selected.effort
+      }
       const provider = ctx.providers.find((p) => p.id === w.providerId)!
       const toolRunId = uid('tool')
       event('info', `${provider.kind === 'cli' ? 'Signed-in CLI' : 'Model request'} started: ${provider.name}`, w)
@@ -342,8 +352,9 @@ export const liveDriver: OrchestratorDriver = {
       let result: ChatResult
       for (let attempt = 0; ; attempt++) {
         try {
-          result = await adapterFor(provider).chat(provider, {
-            model: w.modelId, messages, maxTokens, json: opts.json, signal,
+          if (ctx.modelPolicy && ++calls > ctx.modelPolicy.maxCalls) throw new Error('Task request cap reached; checkpoint retained')
+          result = await providerQueue(provider.id, signal, () => adapterFor(provider).chat(provider, {
+            model: w.modelId, effort: w.reasoningEffort, runId: run.id, projectId: req.projectId, timeoutSeconds: ctx.modelPolicy?.timeoutSeconds, messages, maxTokens, json: opts.json, signal,
             onDelta: (d) => {
               text += d
               w.tokensOut = Math.ceil(text.length / 4)
@@ -352,7 +363,7 @@ export const liveDriver: OrchestratorDriver = {
               opts.onText?.(text)
               scheduleEmit()
             },
-          })
+          }))
           break
         } catch (e) {
           if (isAbort(e) || text.length > 0 || attempt >= MAX_RETRIES || !isRetryable(e)) throw e
@@ -364,6 +375,7 @@ export const liveDriver: OrchestratorDriver = {
           await abortableSleep(wait, signal)
         }
       }
+      w.observedModel = result.observedModel
       w.tokensIn = result.usage.inputTokens
       w.tokensOut = result.usage.outputTokens
       w.usageEstimated = result.usage.estimated
@@ -641,7 +653,7 @@ export const liveDriver: OrchestratorDriver = {
         emit()
         await waitIfPaused()
         // Wait for every worker to settle (not just the first failure) so none can touch the run after we finalise.
-        await scheduleTasks(run.subtasks, ctx.maxWorkers, async (task) => {
+        await scheduleTasks(run.subtasks, ctx.modelPolicy?.profile === 'economy' ? 1 : ctx.maxWorkers, async (task) => {
           await waitIfPaused()
           await runWorker(workers.find((w) => w.subtaskId === task.id)!)
         }, waitIfPaused, signal, (task) => {

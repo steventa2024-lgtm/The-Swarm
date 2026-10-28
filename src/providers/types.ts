@@ -6,6 +6,10 @@ export interface ChatMessage {
 }
 
 export interface ChatRequest {
+  effort?: string
+  runId?: string
+  projectId?: string
+  timeoutSeconds?: number
   model: string
   messages: ChatMessage[]
   maxTokens: number
@@ -25,6 +29,7 @@ export interface Usage {
 }
 
 export interface ChatResult {
+  observedModel?: string
   text: string
   usage: Usage
 }

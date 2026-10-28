@@ -18,7 +18,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
 const IDS: &[&str] = &[
-    "hq", "codex", "claude", "gemini", "cursor", "grok", "ollama",
+    "hq", "codex", "claude", "gemini", "cursor", "grok", "ollama", "deepseek",
 ];
 const STYLES: &[&str] = &[
     "professional",
@@ -28,6 +28,7 @@ const STYLES: &[&str] = &[
     "meticulous",
     "witty",
     "practical",
+    "professional",
 ];
 const ROLES: &[&str] = &[
     "hq",
@@ -177,6 +178,7 @@ impl Default for Persisted {
             "Cursor · QA",
             "Grok · Research",
             "Ollama · Future offline bot",
+            "DeepSeek · Architecture Auditor",
         ];
         let roles = [
             "hq",
@@ -186,6 +188,7 @@ impl Default for Persisted {
             "qa",
             "researcher",
             "docs",
+            "reviewer",
         ];
         Self {
             version: 1,
@@ -357,13 +360,19 @@ pub fn initialize(app: &AppHandle) -> Result<(), String> {
     app.state::<TelegramBots>().0.lock().unwrap().manager_lease = Some(manager);
     if target.is_file() {
         let bytes = std::fs::read(target).map_err(|_| "Cannot read Telegram settings")?;
-        let saved: Persisted = serde_json::from_slice(&bytes)
+        let mut saved: Persisted = serde_json::from_slice(&bytes)
             .map_err(|_| "Telegram settings are damaged; restore a backup before connecting")?;
+        // Additive v1 migration: retain all seven original records verbatim.
+        if saved.version==1 && saved.bots.len()==7 && !saved.bots.iter().any(|b|b.config.id=="deepseek") {
+            let backup=path(app)?.with_file_name("telegram-bots-before-hardlight.json");
+            if !backup.exists(){std::fs::write(&backup, &bytes).map_err(|_|"Cannot preserve Telegram migration backup")?;}
+            saved.bots.push(Persisted::default().bots.into_iter().find(|b|b.config.id=="deepseek").unwrap());
+        }
         let ids: HashSet<_> = saved.bots.iter().map(|b| b.config.id.as_str()).collect();
         if saved.version != 1
-            || ids.len() != 7
+            || ids.len() != 8
             || IDS.iter().any(|id| !ids.contains(id))
-            || saved.bots.len() != 7
+            || saved.bots.len() != 8
             || saved
                 .bots
                 .iter()
@@ -713,7 +722,7 @@ pub async fn tg_test_bot(app: AppHandle, bot_id: String) -> Result<(), String> {
             return Err(e);
         }
     };
-    let provisional = ["cursor", "grok", "ollama"].contains(&bot_id.as_str());
+    let provisional = ["cursor", "grok", "ollama", "deepseek"].contains(&bot_id.as_str());
     let verified = identity(&value, if provisional { "" } else { &wanted });
     let (numeric, actual) = match verified {
         Ok(v) => v,
@@ -864,6 +873,15 @@ pub async fn tg_start_bot(app: AppHandle, bot_id: String) -> Result<(), String> 
         tauri::async_runtime::block_on(poll(app, bot_id, generation, cancel));
     });
     Ok(())
+}
+#[tauri::command]
+pub async fn tg_reconnect_saved(app: AppHandle) -> Result<(),String> {
+    ready(&app)?;
+    let mut failures=0;
+    for id in IDS {
+        if token(id).is_ok() && tg_start_bot(app.clone(),id.to_string()).await.is_err(){failures+=1;}
+    }
+    if failures>0 {Err(format!("{failures} saved bots could not reconnect. Inspect each bot's diagnostics; successful receivers remain running."))}else{Ok(())}
 }
 #[tauri::command]
 pub fn tg_stop_bot(app: AppHandle, bot_id: String) -> Result<(), String> {
@@ -1331,10 +1349,16 @@ async fn handle_update(
         return Ok(());
     };
     let response=match command {
-        "/start"|"/help"=>"The Swarm: /status /agents /projects /tasks /approvals /pause /resume. Only Zero's paired numeric account may control protected actions. No bot-to-bot commands are accepted.".into(),
+        "/start"|"/help"=>"The Swarm: /status /agents /projects /tasks /approvals /preview /recording /files /pause /resume. Only Zero's paired numeric account may control protected actions. No bot-to-bot commands are accepted.".into(),
         "/status"=>{let state=app.state::<TelegramBots>();let inner=state.0.lock().unwrap();if now().saturating_sub(inner.synced_at)>90{"Telegram receiver is online. The desktop workspace snapshot is unavailable; open The Swarm to refresh it. AI readiness is separate.".into()}else{format!("The Swarm desktop is online. Telegram identity is connected; AI provider readiness is separate. Current run: {} · {}.","current workflow",inner.workspace.active_status.as_deref().unwrap_or("idle"))}},
-        "/agents"|"/projects"|"/tasks"=>{let state=app.state::<TelegramBots>();let inner=state.0.lock().unwrap();if now().saturating_sub(inner.synced_at)>90 { "Workspace status unavailable: open the desktop workspace.".into() } else { let rows:Vec<String>=match command {"/agents"=>inner.workspace.agents.iter().map(|r|format!("{} · {}",r.id,r.status)).collect(),"/projects"=>inner.workspace.projects.iter().map(|r|format!("{} · {}",r.id,r.status)).collect(),_=>inner.workspace.tasks.iter().map(|r|format!("{} · {} · {}",r.project_id,r.id,r.status)).collect()};format!("{}\n{}",command.trim_start_matches('/'),if rows.is_empty(){"None in the current workspace snapshot.".into()}else{rows.join("\n")})}},
+        "/agents"|"/projects"|"/tasks"=>{let state=app.state::<TelegramBots>();let inner=state.0.lock().unwrap();if now().saturating_sub(inner.synced_at)>90 { "Workspace status unavailable: open the desktop workspace.".into() } else { let rows:Vec<String>=match command {"/agents"=>inner.workspace.agents.iter().map(|r|format!("{} / {}",crate::communication::label(&r.name,"Workspace item"),r.status)).collect(),"/projects"=>inner.workspace.projects.iter().map(|r|format!("{} / {}",crate::communication::label(&r.name,"Workspace item"),r.status)).collect(),_=>inner.workspace.tasks.iter().map(|r|format!("{} / {}",crate::communication::label(&r.title,"Current task"),r.status)).collect()};format!("{}\n{}",command.trim_start_matches('/'),if rows.is_empty(){"None in the current workspace snapshot.".into()}else{rows.join("\n")})}},
         "/approvals"=>{let pending=app.state::<crate::approvals::ApprovalBook>().pending();format!("Pending owner approvals: {}. Review exact revisions in The Swarm desktop.\n{}",pending.len(),pending.iter().map(|p|format!("{} · project {} · task {}",p.id,p.project_id,p.task_id)).collect::<Vec<_>>().join("\n"))},
+        "/preview"|"/recording"|"/files"=>{
+            let wanted=match command{"/preview"=>"photo","/recording"=>"video",_=>"document"};
+            let rows=crate::media::media_list(app.clone())?;
+            if let Some(a)=rows.into_iter().find(|a|a.kind==wanted){tg_send_media(app.clone(),a.id).await?;"Sent the most recent owner-authorized evidence to the paired destination.".into()}
+            else{"No owner-authorized artifact of that type exists. Use Evidence in the desktop app; this command cannot start a capture.".into()}
+        },
         "/pause"|"/resume"=>{
             let state=app.state::<TelegramBots>();let mut inner=state.0.lock().unwrap();
             if !receiver_current(&inner,id,generation)||!authorized(&inner.persisted,user,chat,kind){return Ok(())}let run=inner.workspace.active_run_id.clone();
@@ -1421,7 +1445,7 @@ pub async fn tg_command_result(
     if pending.expires <= now() || pending.run_id != run_id {
         return Err("Telegram command context expired or changed".into());
     }
-    api(&pending.bot_id,"sendMessage",json!({"chat_id":pending.chat_id,"text":format!("Desktop controller result · run {run_id}: {}",if applied {"requested state confirmed"}else{"action unavailable; state unchanged"})})).await?;
+    api(&pending.bot_id,"sendMessage",json!({"chat_id":pending.chat_id,"text":format!("Desktop controller: {}",if applied {"requested state confirmed"}else{"action unavailable; state unchanged"})})).await?;
     Ok(())
 }
 fn destination(inner: &Inner) -> Result<i64, String> {
@@ -1529,6 +1553,7 @@ fn mapped_role(id: &str) -> &str {
         "cursor-cli" => "qa",
         "grok" => "researcher",
         "ollama" => "docs",
+        "deepseek" => "reviewer",
         _ => id,
     }
 }
@@ -1732,6 +1757,31 @@ fn style_intro(style: &str) -> &'static str {
         _ => "Swarm Headquarters",
     }
 }
+/// Upload bytes from an already owner-authorized immutable snapshot.
+#[tauri::command]
+pub async fn tg_send_media(app: AppHandle, artifact_id: String) -> Result<(),String> {
+    ready(&app)?;
+    let (artifact,bytes)=crate::media::read(&app,&artifact_id)?;
+    let (secret,chat)={
+        let state=app.state::<TelegramBots>();let inner=state.0.lock().unwrap();
+        if !inner.runtime.get("hq").is_some_and(|r|r.verified) || !inner.persisted.bots[0].config.permissions.notifications {return Err("Verify HQ and enable its notifications first".into())}
+        (token("hq")?,destination(&inner)?)
+    };
+    let (method,field)=match artifact.kind.as_str(){"photo"=>("sendPhoto","photo"),"video"=>("sendVideo","video"),_=>("sendDocument","document")};
+    let form=reqwest::multipart::Form::new().text("chat_id",chat.to_string()).text("protect_content","true")
+        .text("caption",format!("Zero, here is approved evidence: {}. This is an actual local artifact; its verification status is described in the desktop report.",crate::communication::label(&artifact.name,"Project evidence")))
+        .part(field,reqwest::multipart::Part::bytes(bytes).file_name(artifact.name).mime_str(&artifact.mime).map_err(|_|"Unsupported media MIME")?);
+    let client=reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).timeout(Duration::from_secs(90)).build().map_err(|_|"Media client unavailable")?;
+    let result=async {
+        let response=client.post(format!("https://api.telegram.org/bot{secret}/{method}")).multipart(form).send().await.map_err(|_|"Media upload interrupted. Delivery is uncertain; check Telegram before retrying.")?;
+        let value:Value=response.json().await.map_err(|_|"Invalid Telegram receipt")?;
+        if value["ok"]!=true{return Err(api_error(value["error_code"].as_u64().unwrap_or(500) as u16,value["parameters"]["retry_after"].as_u64()))}
+        Ok(())
+    }.await;
+    let state=app.state::<TelegramBots>();let mut inner=state.0.lock().unwrap();
+    delivery(&mut inner,"hq",method,if result.is_ok(){"sent"}else{"failed"},&artifact_id,result.as_ref().err().cloned());
+    persist(&app,&inner.persisted)?;drop(inner);changed(&app);result
+}
 #[tauri::command]
 pub async fn tg_request_approval(app: AppHandle, approval_id: String) -> Result<(), String> {
     ready(&app)?;
@@ -1817,7 +1867,7 @@ async fn remind(app: &AppHandle) -> Result<(), String> {
         }
         (chat, ids)
     };
-    for id in ids {
+    for _id in ids {
         verified_api(app,"hq","sendMessage",json!({"chat_id":chat,"text":format!("Personality reminder · Where's Zero? A real approval is still pending. Open The Swarm when ready; no work was started by this reminder.")})).await?;
     }
     Ok(())
@@ -1850,13 +1900,13 @@ mod tests {
         assert!(!authorized(&p, 7, 7, "group"));
     }
     #[test]
-    fn seven_slots_have_independent_offsets_and_no_credential_columns() {
+    fn eight_slots_have_independent_offsets_and_no_credential_columns() {
         let mut p = Persisted::default();
         p.bots[0].offset = 90;
         p.bots[1].offset = 4;
         let saved = serde_json::to_string(&p).unwrap();
         let restored: Persisted = serde_json::from_str(&saved).unwrap();
-        assert_eq!(restored.bots.len(), 7);
+        assert_eq!(restored.bots.len(), 8);
         assert_eq!(restored.bots[0].offset, 90);
         assert_eq!(restored.bots[1].offset, 4);
         assert!(!saved.contains("TOKEN"));

@@ -1,3 +1,4 @@
+import { DEFAULT_MODEL_POLICY } from '@/engine/modelPolicy'
 import { create } from 'zustand'
 import type { DriverContext, RunController } from '@/engine/driver'
 import { failImmediately, liveDriver } from '@/engine/liveDriver'
@@ -18,9 +19,12 @@ import { teamFor } from '@/data/team'
 export const DEMO_PROMPT = 'Build a tiny static page for The Swarm. Assign frontend to create index.html with a heading and a stylesheet link, backend to create styles.css with an accessible dark theme. Both roles must work, own different files, and have no dependencies. Keep each file under 30 lines. Reviewer: inspect the two files. Never apply files.'
 
 let controller: RunController | null = null
+const projectControllers = new Map<string, RunController>()
 const TERMINAL: RunStatus[] = ['completed', 'stopped', 'failed']
 
 interface SwarmState {
+  projectRuns: Record<string, Run>
+  activateProject: (id: string) => void
   run: Run | null
   prompt: string
   mode: RunMode
@@ -60,6 +64,8 @@ interface SwarmState {
 }
 
 export const useSwarm = create<SwarmState>()((set, get) => ({
+  projectRuns: {},
+  activateProject: (id) => { controller = projectControllers.get(id) ?? null; const run = get().projectRuns[id] ?? null; set({ run, runIsLive: !!controller && run?.source === 'live', replaying: false, selectedId: null, applyOpen: false, reviewApprovalId: null }) },
   run: null,
   prompt: '',
   mode: useApp.getState().preferences.defaultMode,
@@ -114,7 +120,12 @@ export const useSwarm = create<SwarmState>()((set, get) => ({
     const s = get()
     const prompt = (opts?.prompt ?? s.prompt).trim()
     if (!prompt) return
-    controller?.stop() // records a live run as stopped before replacing it
+    const appBefore = useApp.getState()
+    const running = Object.values(s.projectRuns).filter((r) => !TERMINAL.includes(r.status))
+    if (running.some((r) => r.task.projectId === appBefore.activeProjectId)) { set({ recorderError: 'This project already has active work. Pause or stop it before starting another task.' }); return }
+    if (running.length >= 2) { set({ recorderError: 'Two project workflows are already active. Wait for a project slot.' }); return }
+    const root = appBefore.projects.find((p) => p.id === appBefore.activeProjectId)?.root
+    if (running.length && (!root || running.some((r) => appBefore.projects.find((p) => p.id === r.task.projectId)?.root === root))) { set({ recorderError: 'Parallel projects require distinct approved roots to avoid conflicting work.' }); return }
     controller?.dispose()
 
     const app = useApp.getState()
@@ -128,7 +139,8 @@ export const useSwarm = create<SwarmState>()((set, get) => ({
     // Count a note as used only when it is really sent to a model (live runs).
     if (live && notes) app.noteUsed(picked.map((m) => m.id))
     const ctx: DriverContext = {
-      providers: live ? app.providers.filter((p) => p.verified && p.status === 'connected' && (p.local || p.subscription || app.preferences.paidApisEnabled)) : seedProviders,
+      providers: live ? app.providers.filter((p) => p.verified && p.status === 'connected' && (p.local || p.subscription || p.id === 'deepseek')) : seedProviders,
+      modelPolicy: live && !opts?.localDemo ? { ...DEFAULT_MODEL_POLICY, ...app.preferences.modelPolicy } : undefined,
       projectName: project?.name,
       projectRoot: live ? project?.root : undefined,
       projectNotes: live && notes ? notes : undefined,
@@ -143,7 +155,7 @@ export const useSwarm = create<SwarmState>()((set, get) => ({
     let prevStatus: RunStatus | null = null
     const request = { prompt, projectId: app.activeProjectId, mode: opts?.localDemo ? 'local-only' as const : s.mode, requestedAgents: opts?.localDemo ? 2 as const : s.agentCount, attachments: s.attachments.map((a) => a.name), attachmentFiles: live ? s.attachments : undefined }
     const onUpdate = (run: Run) => {
-        set({ run })
+        set((state) => ({ projectRuns: { ...state.projectRuns, [run.task.projectId]: run }, ...(useApp.getState().activeProjectId === run.task.projectId ? { run } : {}) }))
         if (live && useApp.getState().preferences.storeRunLogs) void recordFrame(run).catch(() => set({ recorderError: 'Flight recorder could not save. Check local storage space.' }))
         if (opts?.record !== false && TERMINAL.includes(run.status) && prevStatus && !TERMINAL.includes(prevStatus)) {
           // Keep the full result (files, events) so it can be reopened later — only if the user hasn't turned that off.
@@ -165,6 +177,7 @@ export const useSwarm = create<SwarmState>()((set, get) => ({
       // Local Only with no local model: show a failed run that says why, rather than quietly using a hosted model.
       controller = failImmediately(request, ctx, onUpdate, e instanceof Error ? e.message : String(e), e instanceof LocalOnlyError ? 'No local model' : 'Provider unavailable')
     }
+    if (controller) projectControllers.set(app.activeProjectId, controller)
     // Attachments are per-run: clearing them avoids re-sending a file to a provider by accident on the next run.
     set({ prompt: '', attachments: [], selectedId: null, applyOpen: false, runIsLive: !!live, replaying: false, recorderError: null })
   },
@@ -174,6 +187,8 @@ export const useSwarm = create<SwarmState>()((set, get) => ({
   reset: () => {
     controller?.dispose()
     controller = null
-    set({ run: null, selectedId: null, applyOpen: false, reviewApprovalId: null, replaying: false, runIsLive: false })
+    projectControllers.delete(useApp.getState().activeProjectId)
+    const projectRuns = { ...get().projectRuns }; delete projectRuns[useApp.getState().activeProjectId]
+    set({ projectRuns, run: null, selectedId: null, applyOpen: false, reviewApprovalId: null, replaying: false, runIsLive: false })
   },
 }))

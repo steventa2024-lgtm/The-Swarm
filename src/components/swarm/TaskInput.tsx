@@ -28,7 +28,7 @@ export function TaskInput() {
   }
 
   return (
-    <div className="glass rounded-2xl p-3">
+    <div className="glass rounded-2xl p-3"><button className="mb-2 text-[11px] text-azure-hi" onClick={() => useApp.getState().setPage('models')}>Model choice & next-task override / usage limits</button>
       <div className="flex gap-3">
         <div className="min-w-0 flex-1">
           <Textarea

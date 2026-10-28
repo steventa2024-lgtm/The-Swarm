@@ -42,7 +42,7 @@ export function SettingsPage() {
   const updateProvider = useApp((s) => s.updateProvider)
   const resetData = useApp((s) => s.resetData)
   const [saved, setSaved] = useState<number | null>(null)
-  const [policyError, setPolicyError] = useState('')
+  const [policyError] = useState('')
   useEffect(() => { listRuns().then((l) => setSaved(l.length)).catch(() => setSaved(0)) }, [])
   const p = <K extends keyof Preferences>(k: K) => (v: Preferences[K]) => set({ [k]: v } as Partial<Preferences>)
 
@@ -51,7 +51,7 @@ export function SettingsPage() {
       <div className="mx-auto max-w-[860px] space-y-4">
         <PageHeader title="Settings" description="Preferences are stored locally on this device." />
         <Section title="Owner controls" description="Zero is the only approver. Agent personalities never change permissions.">
-          <Row label="Paid API adapters" hint="Off on every launch. Subscription CLIs and local models remain available. Enabling requires native owner confirmation."><Switch checked={!!prefs.paidApisEnabled} onCheckedChange={async (enabled) => { try { const { invoke } = await import('@tauri-apps/api/core'); await invoke('set_api_policy', { enabled }); set({ paidApisEnabled: enabled }); setPolicyError('') } catch (e) { setPolicyError(String(e)) } }} /></Row>
+          <Row label="Paid inference policy" hint="Only DeepSeek may use a separately metered API. All other external API adapters are blocked natively, including legacy settings."><button className="text-xs text-azure-hi" onClick={() => useApp.getState().setPage('models')}>Open Model Control</button></Row>
           {policyError && <p role="alert" className="text-xs text-bad">{policyError}</p>}
           <Row label="Personalities" hint="Optional speaking style, visibly labeled in the UI."><Switch checked={!!prefs.personalities} onCheckedChange={p('personalities')} /></Row>
           <Row label="Approval check-ins" hint="“Where’s Zero?” reminders are optional, labeled personality, and only run while a real approval is pending."><Button variant="outline" size="sm" onClick={() => useApp.getState().setPage('telegram')}>Configure Telegram reminders</Button></Row>

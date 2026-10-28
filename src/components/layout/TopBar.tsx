@@ -13,6 +13,7 @@ import { Segmented } from '@/components/ui/segmented'
 import type { PageId } from '@/types'
 
 const TITLES: Record<PageId, string> = {
+  models: 'Model Control', mascots: 'Mascot Studio',
   swarm: 'Swarm',
   projects: 'Projects',
   agents: 'Agents',

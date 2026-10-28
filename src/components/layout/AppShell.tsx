@@ -1,3 +1,6 @@
+import { CaptureIndicator } from '@/components/CaptureIndicator'
+import { MascotStudioPage } from '@/pages/MascotStudioPage'
+import { ModelControlPage } from '@/pages/ModelControlPage'
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -19,6 +22,8 @@ import { TelegramBotsPage } from '@/pages/TelegramBotsPage'
 import { connectTelegramWorkspace } from '@/lib/telegramBridge'
 
 export function AppShell() {
+  const activeProjectId = useApp((s) => s.activeProjectId)
+  useEffect(() => { useSwarm.getState().activateProject(activeProjectId) }, [activeProjectId])
   const page = useApp((s) => s.page)
   const hydrated = useApp((s) => s.hydrated)
   const reduceMotion = useApp((s) => s.preferences.reduceMotion)
@@ -58,6 +63,7 @@ export function AppShell() {
             <div className="orb animate-float" style={{ width: 420, height: 420, right: '8%', top: '-8%', background: 'rgba(37,99,255,.35)' }} />
             <div className="orb animate-float" style={{ width: 360, height: 360, left: '14%', bottom: '-12%', background: 'rgba(34,211,238,.16)', animationDelay: '-3s' }} />
           </div>
+          <CaptureIndicator />
           <Sidebar />
           <div className="relative z-10 flex min-w-0 flex-1 flex-col">
             <TopBar />
@@ -69,6 +75,8 @@ export function AppShell() {
                   initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                   transition={{ duration: 0.18 }}
                 >
+                  {page === 'mascots' && <MascotStudioPage />}
+                  {page === 'models' && <ModelControlPage />}
                   {page === 'swarm' && <SwarmPage booting={!booted} />}
                   {page === 'projects' && <ProjectsPage />}
                   {page === 'agents' && <AgentsPage />}

@@ -1,3 +1,4 @@
+import { deepseekAdapter } from './deepseek'
 import type { ModelInfo, Provider } from '@/types'
 import { anthropicAdapter } from './anthropic'
 import { openAiAdapter } from './openai'
@@ -8,6 +9,7 @@ export * from './types'
 export { isAbort, inTauri } from './transport'
 
 export function adapterFor(p: Provider): ProviderAdapter {
+  if (p.id === 'deepseek') return deepseekAdapter
   if (p.kind === 'cli') return cliAdapter
   return p.kind === 'anthropic' ? anthropicAdapter : openAiAdapter
 }

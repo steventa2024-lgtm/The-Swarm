@@ -50,7 +50,7 @@ interface AppState {
 
 const seeds = () => ({
   activeProjectId: seedProjects[0].id,
-  providers: [...cliProviders, ...seedProviders.map((p) => ({ ...p, status: 'unconfigured' as const, verified: false }))],
+  providers: [...cliProviders, { id: 'deepseek', name: 'DeepSeek', kind: 'openai-compatible' as const, endpoint: 'https://api.deepseek.com', local: false, status: 'unconfigured' as const, models: [] }, ...seedProviders.map((p) => ({ ...p, status: 'unconfigured' as const, verified: false }))],
   agents: seedAgents.map((a) => ({ ...a, name: `${teamFor(a.role).name} · ${a.role === 'reviewer' ? 'Reviewer' : teamFor(a.role).title}`, providerId: teamFor(a.role).id, modelId: teamFor(a.role).id === 'ollama' ? 'qwen2.5-coder:7b' : 'default', enabled: a.role !== 'researcher' })),
   projects: [{ ...seedProjects[0], name: 'The Swarm', path: 'Choose a project folder', stack: ['Local workspace'], branch: '—', lastRunAt: undefined, runCount: 0, description: 'Your persistent engineering workspace.' }],
   memory: [],
@@ -117,7 +117,7 @@ export const useApp = create<AppState>()(
           return { ...a, name: a.name === old?.name ? `${team.name} · ${a.role === 'reviewer' ? 'Reviewer' : team.title}` : a.name,
             ...(a.providerId === old?.providerId && a.modelId === old?.modelId ? { providerId: team.id, modelId: team.id === 'ollama' ? 'qwen2.5-coder:7b' : 'default', enabled: a.role === 'researcher' ? false : a.enabled } : {}) }
         })
-        return { ...current, ...p, agents, providers: [...(p.providers ?? current.providers), ...cliProviders.filter((c) => !(p.providers ?? current.providers).some((v) => v.id === c.id))], preferences: { ...current.preferences, ...p.preferences, teamVersion: 2, paidApisEnabled: false } }
+        return { ...current, ...p, agents, providers: [...(p.providers ?? current.providers), ...(!((p.providers ?? current.providers).some((v) => v.id === 'deepseek')) ? [{ id: 'deepseek', name: 'DeepSeek', kind: 'openai-compatible' as const, endpoint: 'https://api.deepseek.com', local: false, status: 'unconfigured' as const, verified: false, models: [] }] : []), ...cliProviders.filter((c) => !(p.providers ?? current.providers).some((v) => v.id === c.id))], preferences: { ...current.preferences, ...p.preferences, teamVersion: 2, paidApisEnabled: false } }
       },
       onRehydrateStorage: () => () => useApp.setState({ hydrated: true }),
     },

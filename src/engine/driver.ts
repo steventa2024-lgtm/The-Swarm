@@ -13,6 +13,7 @@ export interface RunRequest {
 }
 
 export interface DriverContext {
+  modelPolicy?: import('./modelPolicy').ModelPolicy
   providers: Provider[]
   agents: AgentDefinition[]
   /** Max parallel workers allowed by preferences. */

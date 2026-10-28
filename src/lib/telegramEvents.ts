@@ -17,7 +17,7 @@ export interface TelegramOperationalEvent {
 export function operationalEvents(run: Run, projectName?: string): TelegramOperationalEvent[] {
   if (run.source !== 'live') return []
   const events: TelegramOperationalEvent[] = []
-  const add = (kind: TelegramEventKind, suffix: string, agentId = 'hq', taskId = run.task.id, status = run.status) => {
+  const add = (kind: TelegramEventKind, suffix: string, agentId = 'hq', taskId = run.task.id, status: string = run.status) => {
     events.push({ id: `${run.id}_${suffix}`, kind, projectId: run.task.projectId, taskId, runId: run.id, agentId, status, projectName, taskTitle: run.subtasks.find((t) => t.id === taskId)?.title })
   }
   add('task_started', 'started', 'hq', run.task.id, 'running')

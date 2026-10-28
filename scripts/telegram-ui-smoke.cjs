@@ -10,15 +10,15 @@ const fs = require('node:fs/promises');
   await page.getByRole('button', { name: 'Telegram Bots', exact: true }).click();
   await page.getByRole('heading', { name: 'Telegram Bots', exact: true }).waitFor();
   const identities = page.locator('section[aria-label="Telegram bot identities"]');
-  if (await identities.getByRole('article').count() !== 7) throw new Error('All seven bot slots must be shown');
+  if (await identities.getByRole('article').count() !== 8) throw new Error('All eight bot slots must be shown');
   const tokens = identities.locator('input[type=password]');
-  if (await tokens.count() !== 7) throw new Error('Each bot requires one masked credential entry');
+  if (await tokens.count() !== 8) throw new Error('Each bot requires one masked credential entry');
   for (const field of await tokens.all()) {
     if (await field.isEnabled()) throw new Error('Browser preview must not accept native credentials');
     if (await field.inputValue()) throw new Error('No token may be seeded or persisted in the browser');
   }
-  if (await identities.getByText('Not configured', { exact: true }).count() !== 7) throw new Error('Preview must not fabricate verified connections');
-  await page.getByText('0 / 7 bots listening', { exact: true }).waitFor();
+  for (const card of await identities.getByRole('article').all()) { if (await card.locator(':scope > p').first().innerText() !== 'Not configured') throw new Error('Preview must not fabricate verified connections'); }
+  await page.getByText('0 / 8 bots listening', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Pair Zero', exact: true }).waitFor();
   if (await page.getByRole('button', { name: 'Pair Zero', exact: true }).isEnabled()) throw new Error('Browser must not grant owner pairing');
   if (await page.getByRole('button', { name: 'Run harmless approval test', exact: true }).isEnabled()) throw new Error('Unpaired preview cannot request approval tests');
@@ -31,5 +31,5 @@ const fs = require('node:fs/promises');
   if (/TELEGRAM_BOT_TOKEN|telegram-token-hq|"tokenPresent":true/.test(persisted)) throw new Error('Telegram secrets or fictitious connectivity entered frontend persistence');
   if (errors.length) throw new Error(errors.join('\n'));
   await browser.close();
-  console.log('Telegram UI smoke passed: seven unconfigured identities, masked empty token entries, native-only setup, pairing and approval guards, no browser errors.');
+  console.log('Telegram UI smoke passed: eight unconfigured identities, masked empty token entries, native-only setup, pairing and approval guards, no browser errors.');
 })().catch((error) => { console.error(error); process.exit(1); });

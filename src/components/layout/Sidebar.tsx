@@ -14,7 +14,9 @@ import { Tip } from '@/components/ui/tooltip'
 const NAV: { id: PageId; label: string; icon: LucideIcon }[] = [
   { id: 'swarm', label: 'Swarm', icon: Workflow },
   { id: 'projects', label: 'Projects', icon: FolderKanban },
-  { id: 'agents', label: 'Agents', icon: Users },
+  { id: 'agents', label: 'Agent Team', icon: Users },
+  { id: 'models', label: 'Model Control', icon: Sparkles },
+  { id: 'mascots', label: 'Mascot Studio', icon: Sparkles },
   { id: 'knowledge', label: 'Knowledge', icon: BookMarked },
   { id: 'templates', label: 'Templates', icon: LayoutTemplate },
   { id: 'integrations', label: 'Integrations', icon: Plug },

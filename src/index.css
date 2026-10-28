@@ -203,3 +203,16 @@ select option { background: #0b1a3d; color: #e8f0ff; }
   0% { opacity: 0.75; transform: scale(1); }
   100% { opacity: 0; transform: scale(1.035); }
 }
+
+/* Hardlight concept art: CSS depth and source-driven state, never fabricated motion telemetry. */
+.familiar-roster{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px}.familiar-card{min-width:0;overflow:hidden;text-align:left;transition:border-color .2s,background .2s}.familiar-card:hover{background:rgba(28,52,79,.7)}
+.agent-mascot{position:relative;isolation:isolate;aspect-ratio:1.1;overflow:hidden;background:radial-gradient(ellipse at 50% 80%,color-mix(in srgb,var(--familiar) 12%,transparent),transparent 65%)}
+.agent-mascot img{display:block;width:100%;height:100%;object-fit:cover;mix-blend-mode:screen;animation:familiar-float 6s ease-in-out infinite;will-change:transform}.mascot-portrait{aspect-ratio:1.15}.mascot-portrait img{object-fit:cover}
+.mascot-aura{position:absolute;inset:25%;z-index:-1;border-radius:50%;background:var(--familiar);filter:blur(32px);opacity:.15;animation:familiar-glow 4s ease-in-out infinite alternate}.mascot-emote{position:absolute;right:10px;top:8px;color:var(--familiar);font-size:18px;text-shadow:0 0 12px var(--familiar)}
+.mascot-particle{position:absolute;width:3px;height:3px;background:var(--familiar);transform:rotate(45deg);opacity:.5;animation:familiar-glow 2.5s infinite alternate}.p-one{left:20%;top:25%}.p-two{right:15%;bottom:30%;animation-delay:-1s}
+.agent-mascot[data-state=offline] img{filter:grayscale(.8);opacity:.5;animation:none}.agent-mascot[data-state=failed]{box-shadow:inset 0 0 25px #ef444420}.agent-mascot[data-state=waiting_approval]{box-shadow:inset 0 0 22px #f5bb5220}.agent-mascot[data-state=thinking] .mascot-aura,.agent-mascot[data-state=reviewing] .mascot-aura{opacity:.4}
+.agent-mascot[data-motion=cinematic] img{animation-duration:3.5s}.agent-mascot[data-motion=off] *,.agent-mascot[data-motion=off] img{animation:none!important;will-change:auto}.agent-mascot[data-visible=false] *{animation-play-state:paused!important}.reduce-motion .agent-mascot *{animation:none!important}
+@keyframes familiar-float{0%,100%{transform:translateY(1px) scale(1.015)}50%{transform:translateY(-4px) scale(1.025)}}@keyframes familiar-glow{to{opacity:.35;transform:scale(1.08)}}
+@media(max-width:1650px){.familiar-roster{grid-template-columns:repeat(4,minmax(0,1fr))}.familiar-card{display:flex;align-items:center}.familiar-card .agent-mascot{width:74px;flex-shrink:0}.familiar-card>div:last-child{padding:8px}.familiar-card p{white-space:normal}}
+@media(max-width:1000px){.familiar-roster{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(prefers-reduced-motion:reduce){.agent-mascot *{animation:none!important;will-change:auto}}
