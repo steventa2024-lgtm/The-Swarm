@@ -15,13 +15,13 @@ export async function connectTelegramWorkspace(): Promise<() => void> {
     const app = useApp.getState(), swarm = useSwarm.getState()
     const run = !swarm.replaying && swarm.runIsLive ? swarm.run : null
     const workspace = {
-      projects: app.projects.map((p) => ({ id: p.id, status: p.status })),
+      projects: app.projects.map((p) => ({ id: p.id, name: p.name, status: p.status })),
       agents: app.agents.map((a) => {
         const p = app.providers.find((provider) => provider.id === a.providerId)
         const failed = run?.workers.some((w) => w.agentId === a.id && w.status === 'error')
-        return { id: a.providerId, status: !a.enabled ? 'disabled' : failed ? 'error' : p?.verified && p.status === 'connected' ? 'ready' : 'offline' }
+        return { id: a.providerId, name: p?.name ?? a.providerId, status: !a.enabled ? 'disabled' : failed ? 'error' : p?.verified && p.status === 'connected' ? 'ready' : 'offline' }
       }),
-      tasks: run ? [{ id: run.task.id, projectId: run.task.projectId, runId: run.id, status: run.status }] : [],
+      tasks: run ? [{ id: run.task.id, title: run.task.title, projectId: run.task.projectId, runId: run.id, status: run.status }] : [],
       activeRunId: run?.id ?? null,
       activeStatus: run?.status ?? null,
     }
@@ -30,7 +30,7 @@ export async function connectTelegramWorkspace(): Promise<() => void> {
       syncSignature = signature
       void invoke('tg_sync_workspace', { workspace }).catch(() => { syncSignature = '' })
     }
-    if (run) for (const event of operationalEvents(run)) {
+    if (run) for (const event of operationalEvents(run, app.projects.find((p) => p.id === run.task.projectId)?.name)) {
       if (published.has(event.id)) continue
       published.add(event.id)
       if (published.size > 2000) published.delete(published.values().next().value!)

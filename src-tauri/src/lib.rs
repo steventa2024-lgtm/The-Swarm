@@ -2,6 +2,7 @@ use tauri::Manager;
 use tauri_plugin_sql::{Builder as SqlBuilder, Migration, MigrationKind};
 
 mod checks;
+mod communication;
 mod fs;
 mod preview;
 mod provider;

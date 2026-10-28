@@ -8,15 +8,17 @@ export interface TelegramOperationalEvent {
   taskId: string
   runId: string
   agentId: string
+  projectName?: string
+  taskTitle?: string
   status: string
 }
 
 /** Only fixed states and opaque references cross this boundary. Never model prose or source. */
-export function operationalEvents(run: Run): TelegramOperationalEvent[] {
+export function operationalEvents(run: Run, projectName?: string): TelegramOperationalEvent[] {
   if (run.source !== 'live') return []
   const events: TelegramOperationalEvent[] = []
   const add = (kind: TelegramEventKind, suffix: string, agentId = 'hq', taskId = run.task.id, status = run.status) => {
-    events.push({ id: `${run.id}_${suffix}`, kind, projectId: run.task.projectId, taskId, runId: run.id, agentId, status })
+    events.push({ id: `${run.id}_${suffix}`, kind, projectId: run.task.projectId, taskId, runId: run.id, agentId, status, projectName, taskTitle: run.subtasks.find((t) => t.id === taskId)?.title })
   }
   add('task_started', 'started', 'hq', run.task.id, 'running')
   for (const worker of run.workers.slice(1, -1)) {
@@ -26,10 +28,9 @@ export function operationalEvents(run: Run): TelegramOperationalEvent[] {
     if (worker.status === 'error') add('task_failed', `${worker.id}_failed`, worker.providerId, worker.subtaskId, 'failed')
   }
   if (run.status === 'completed') {
-    add('workflow_finished', 'finished')
+    add('workflow_finished', 'finished', 'hq', run.task.id, run.reviewVerdict === 'approved' ? 'reviewed' : run.status)
     if (run.reviewVerdict !== 'approved') add('project_attention', 'attention')
   } else if (run.status === 'failed') {
-    add('task_failed', 'failed')
     add('critical_alert', 'critical')
   }
   return events

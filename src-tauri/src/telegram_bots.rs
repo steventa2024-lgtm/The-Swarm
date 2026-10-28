@@ -252,12 +252,16 @@ pub struct Workspace {
 }
 #[derive(Clone, Deserialize)]
 pub struct Reference {
+    #[serde(default)]
+    pub name: String,
     pub id: String,
     pub status: String,
 }
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskRef {
+    #[serde(default)]
+    pub title: String,
     pub id: String,
     pub run_id: String,
     pub project_id: String,
@@ -1328,7 +1332,7 @@ async fn handle_update(
     };
     let response=match command {
         "/start"|"/help"=>"The Swarm: /status /agents /projects /tasks /approvals /pause /resume. Only Zero's paired numeric account may control protected actions. No bot-to-bot commands are accepted.".into(),
-        "/status"=>{let state=app.state::<TelegramBots>();let inner=state.0.lock().unwrap();if now().saturating_sub(inner.synced_at)>90{"Telegram receiver is online. The desktop workspace snapshot is unavailable; open The Swarm to refresh it. AI readiness is separate.".into()}else{format!("The Swarm desktop is online. Telegram identity is connected; AI provider readiness is separate. Current run: {} · {}.",inner.workspace.active_run_id.as_deref().unwrap_or("none"),inner.workspace.active_status.as_deref().unwrap_or("idle"))}},
+        "/status"=>{let state=app.state::<TelegramBots>();let inner=state.0.lock().unwrap();if now().saturating_sub(inner.synced_at)>90{"Telegram receiver is online. The desktop workspace snapshot is unavailable; open The Swarm to refresh it. AI readiness is separate.".into()}else{format!("The Swarm desktop is online. Telegram identity is connected; AI provider readiness is separate. Current run: {} · {}.","current workflow",inner.workspace.active_status.as_deref().unwrap_or("idle"))}},
         "/agents"|"/projects"|"/tasks"=>{let state=app.state::<TelegramBots>();let inner=state.0.lock().unwrap();if now().saturating_sub(inner.synced_at)>90 { "Workspace status unavailable: open the desktop workspace.".into() } else { let rows:Vec<String>=match command {"/agents"=>inner.workspace.agents.iter().map(|r|format!("{} · {}",r.id,r.status)).collect(),"/projects"=>inner.workspace.projects.iter().map(|r|format!("{} · {}",r.id,r.status)).collect(),_=>inner.workspace.tasks.iter().map(|r|format!("{} · {} · {}",r.project_id,r.id,r.status)).collect()};format!("{}\n{}",command.trim_start_matches('/'),if rows.is_empty(){"None in the current workspace snapshot.".into()}else{rows.join("\n")})}},
         "/approvals"=>{let pending=app.state::<crate::approvals::ApprovalBook>().pending();format!("Pending owner approvals: {}. Review exact revisions in The Swarm desktop.\n{}",pending.len(),pending.iter().map(|p|format!("{} · project {} · task {}",p.id,p.project_id,p.task_id)).collect::<Vec<_>>().join("\n"))},
         "/pause"|"/resume"=>{
@@ -1497,6 +1501,10 @@ pub async fn tg_send_test(app: AppHandle, bot_id: String) -> Result<(), String> 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OperationalEvent {
+    #[serde(default)]
+    pub project_name: String,
+    #[serde(default)]
+    pub task_title: String,
     pub id: String,
     pub kind: String,
     pub project_id: String,
@@ -1543,20 +1551,16 @@ pub async fn tg_publish_event(app: AppHandle, event: OperationalEvent) -> Result
             "Operational messages accept known event types and opaque references only".into(),
         );
     }
-    let targets = {
-        let state = app.state::<TelegramBots>();
-        let inner = state.0.lock().unwrap();
-        inner
-            .persisted
-            .bots
-            .iter()
-            .filter(|b| b.config.id == "hq" || b.config.role == mapped_role(&event.agent_id))
-            .map(|b| b.config.id.clone())
-            .collect::<Vec<_>>()
+    // One origin. Unconfigured specialists are attributed through HQ.
+    let target = {
+        let state = app.state::<TelegramBots>(); let inner = state.0.lock().unwrap();
+        if matches!(event.kind.as_str(), "agent_assigned" | "task_finished" | "task_failed") && event.agent_id != "hq" {
+            inner.persisted.bots.iter().find(|b| b.config.id != "hq" && b.config.role == mapped_role(&event.agent_id)
+                && inner.runtime.get(&b.config.id).is_some_and(|r| r.verified))
+                .map(|b| b.config.id.clone()).unwrap_or_else(|| "hq".into())
+        } else { "hq".into() }
     };
-    for id in targets {
-        enqueue(&app, &id, &event)?;
-    }
+    enqueue(&app, &target, &event)?;
     flush_queue(&app).await
 }
 fn enqueue(app: &AppHandle, id: &str, event: &OperationalEvent) -> Result<(), String> {
@@ -1690,15 +1694,8 @@ async fn flush_queue(app: &AppHandle) -> Result<(), String> {
         let (mut item, chat, intro) = selected;
         let event = &item.event;
         let id = &item.bot_id;
-        let text = format!(
-            "{intro} · {}\nAgent: {id}\nProject: {}\nTask: {}\nRun: {}\nEvent: {}\nState: {}",
-            event.kind.replace('_', " "),
-            event.project_id,
-            event.task_id,
-            event.run_id,
-            event.id,
-            event.status
-        );
+        let _ = intro;
+        let text = crate::communication::message(&event.kind, &event.project_name, &event.task_title, &event.agent_id, &event.status);
         let result =
             verified_api(app, id, "sendMessage", json!({"chat_id":chat,"text":text})).await;
         let state = app.state::<TelegramBots>();
@@ -1766,7 +1763,7 @@ pub async fn tg_request_approval(app: AppHandle, approval_id: String) -> Result<
     } else {
         "Owner authorization applies to this exact revision only."
     };
-    verified_api(&app,"hq","sendMessage",json!({"chat_id":chat,"text":format!("Zero, a reviewed proposal needs your decision.\nProject: {}\nTask: {}\nRun: {}\nRevision: {}\n{} files. {policy}\nInspect the exact contents in The Swarm desktop. Expires at {} UTC epoch seconds.",info.project_id,info.task_id,info.run_id,info.id,info.paths.len(),info.expires_at),"reply_markup":{"inline_keyboard":[[{"text":"Review in desktop","callback_data":format!("review:{}",info.id)}],[{"text":if info.risk=="high"{"Record approval intent"}else{"Approve exact revision"},"callback_data":format!("approve:{}",info.id)},{"text":"Reject","callback_data":format!("reject:{}",info.id)}]]}})).await?;
+    verified_api(&app,"hq","sendMessage",json!({"chat_id":chat,"text":format!("Zero, a reviewed proposal needs your decision. {} files are staged; nothing has been applied.\n{policy}\nTap Review in desktop to inspect the exact diff and test evidence. This request expires after 15 minutes.",info.paths.len()),"reply_markup":{"inline_keyboard":[[{"text":"Review in desktop","callback_data":format!("review:{}",info.id)}],[{"text":if info.risk=="high"{"Record approval intent"}else{"Approve exact revision"},"callback_data":format!("approve:{}",info.id)},{"text":"Reject","callback_data":format!("reject:{}",info.id)}]]}})).await?;
     let state = app.state::<TelegramBots>();
     let mut inner = state.0.lock().unwrap();
     delivery(&mut inner, "hq", "approval", "sent", &approval_id, None);
@@ -1821,7 +1818,7 @@ async fn remind(app: &AppHandle) -> Result<(), String> {
         (chat, ids)
     };
     for id in ids {
-        verified_api(app,"hq","sendMessage",json!({"chat_id":chat,"text":format!("Personality reminder · Where's Zero? A real approval is still pending. Revision {id}. Open The Swarm when ready; no work was started by this reminder.")})).await?;
+        verified_api(app,"hq","sendMessage",json!({"chat_id":chat,"text":format!("Personality reminder · Where's Zero? A real approval is still pending. Open The Swarm when ready; no work was started by this reminder.")})).await?;
     }
     Ok(())
 }
