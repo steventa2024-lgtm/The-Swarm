@@ -1,6 +1,8 @@
 # Telegram activation validation
 
-Development branch: `feat/telegram-multi-bot` in the existing repository history. Source baseline includes the preceding local Swarm upgrade. Nothing has been pushed to GitHub.
+Historical activation snapshot for `feat/telegram-multi-bot`, before the Hardlight upgrade and GitHub handoff. Counts, seven-slot UI and local-only publication status below describe that stage. Use [HANDOFF.md](HANDOFF.md) and the [current verification report](swarm-upgrade-verification.md) for the latest state.
+
+At this snapshot, the development branch was `feat/telegram-multi-bot` in the existing repository history, and no upgrade changes had yet been pushed to GitHub.
 
 ## Tested
 
