@@ -154,6 +154,22 @@ pub struct Delivery {
     pub reference: String,
     pub error: Option<String>,
 }
+
+// Communication evidence has a separate window from the 15-minute approval
+// authority. A receipt changes only its exact delivery row, never a proposal.
+const RECEIPT_TTL_SECS: u64 = 24 * 60 * 60;
+fn acknowledge_receipt(deliveries: &mut [Delivery], bot_id: &str, receipt_id: &str, at: u64) -> bool {
+    if uuid::Uuid::parse_str(receipt_id).is_err() { return false }
+    let Some(delivery) = deliveries.iter_mut().find(|d| {
+        d.id == receipt_id
+            && d.bot_id == bot_id
+            && ["test", "sendPhoto", "sendVideo", "sendDocument"].contains(&d.kind.as_str())
+            && ["queued", "sent"].contains(&d.status.as_str())
+            && at.checked_sub(d.at).is_some_and(|age| age < RECEIPT_TTL_SECS)
+    }) else { return false };
+    delivery.status = "received".into();
+    true
+}
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Persisted {
@@ -1279,19 +1295,13 @@ async fn handle_update(
         if action == "receipt" {
             let state = app.state::<TelegramBots>();
             let mut inner = state.0.lock().unwrap();
-            let valid = if let Some(delivery) = inner.persisted.deliveries.iter_mut().find(|d| {
-                d.id == revision
-                    && d.bot_id == id
-                    && d.kind == "test"
-                    && d.at + 900 > now()
-                    && ["queued", "sent"].contains(&d.status.as_str())
-            }) {
-                delivery.status = "received".into();
+            if !receiver_current(&inner, id, generation) || !authorized(&inner.persisted, user, chat, kind) {
+                return Ok(());
+            }
+            let valid = acknowledge_receipt(&mut inner.persisted.deliveries, id, revision, now());
+            if valid {
                 persist(app, &inner.persisted)?;
-                true
-            } else {
-                false
-            };
+            }
             drop(inner);
             changed(app);
             let _=api(id,"answerCallbackQuery",json!({"callback_query_id":cbid,"text":if valid{"Receipt verified in The Swarm."}else{"Receipt expired, unknown, or already confirmed."}})).await;
@@ -1878,6 +1888,62 @@ async fn remind(app: &AppHandle) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn receipt_delivery(kind: &str, status: &str, at: u64) -> Delivery {
+        Delivery { id: "00000000-0000-4000-8000-000000000001".into(), bot_id: "hq".into(), kind: kind.into(), status: status.into(), at, reference: "artifact-unchanged".into(), error: None }
+    }
+    #[test]
+    fn media_and_test_receipts_accept_a_two_hour_delay_exactly_once() {
+        let at = 500_000;
+        for kind in ["test", "sendPhoto", "sendVideo", "sendDocument"] {
+            for status in ["queued", "sent"] {
+                let mut deliveries = vec![receipt_delivery(kind, status, at - 2 * 3600)];
+                let receipt = deliveries[0].id.clone();
+                assert!(acknowledge_receipt(&mut deliveries, "hq", &receipt, at), "{kind} / {status}");
+                assert_eq!(deliveries[0].status, "received");
+                assert_eq!(deliveries[0].reference, "artifact-unchanged");
+                assert_eq!(deliveries[0].at, at - 2 * 3600);
+                assert!(!acknowledge_receipt(&mut deliveries, "hq", &receipt, at + 1));
+            }
+        }
+    }
+    #[test]
+    fn receipt_confirmation_cannot_cross_bot_identity_or_delivery_uuid() {
+        let at = 500_000;
+        for (bot, receipt) in [
+            ("codex", "00000000-0000-4000-8000-000000000001"),
+            ("hq", "00000000-0000-4000-8000-000000000002"),
+            ("hq", "not-a-delivery-uuid"),
+        ] {
+            let mut deliveries = vec![receipt_delivery("sendPhoto", "sent", at - 60)];
+            let before = serde_json::to_value(&deliveries).unwrap();
+            assert!(!acknowledge_receipt(&mut deliveries, bot, receipt, at));
+            assert_eq!(serde_json::to_value(&deliveries).unwrap(), before);
+        }
+    }
+    #[test]
+    fn approval_notifications_and_failed_deliveries_cannot_be_receipted() {
+        let at = 500_000;
+        for (kind, status) in [("approval", "sent"), ("task_finished", "sent"), ("sendVideo", "failed"), ("sendDocument", "received")] {
+            let mut deliveries = vec![receipt_delivery(kind, status, at - 60)];
+            let receipt = deliveries[0].id.clone();
+            let before = serde_json::to_value(&deliveries).unwrap();
+            assert!(!acknowledge_receipt(&mut deliveries, "hq", &receipt, at));
+            assert_eq!(serde_json::to_value(&deliveries).unwrap(), before);
+        }
+    }
+    #[test]
+    fn receipt_window_rejects_future_timestamps_and_one_day_expiry() {
+        let at = 500_000;
+        for created in [at + 1, at - RECEIPT_TTL_SECS, at - RECEIPT_TTL_SECS - 1] {
+            let mut deliveries = vec![receipt_delivery("sendPhoto", "sent", created)];
+            let receipt = deliveries[0].id.clone();
+            assert!(!acknowledge_receipt(&mut deliveries, "hq", &receipt, at));
+            assert_eq!(deliveries[0].status, "sent");
+        }
+        let mut recent = vec![receipt_delivery("sendPhoto", "sent", at - RECEIPT_TTL_SECS + 1)];
+        let receipt = recent[0].id.clone();
+        assert!(acknowledge_receipt(&mut recent, "hq", &receipt, at));
+    }
     #[test]
     fn identity_mismatch_and_non_bot_are_rejected() {
         let bot = json!({"id":42,"is_bot":true,"username":"ExpectedBot"});

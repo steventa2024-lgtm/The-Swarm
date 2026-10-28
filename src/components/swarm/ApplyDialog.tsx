@@ -6,6 +6,7 @@ import { applyFiles, stageFiles, getStagedProposal, fsAvailable, pickFolder, rea
 import { collapse, diffLines, type DiffResult } from '@/lib/diff'
 import { ROLE_META } from '@/lib/meta'
 import { cn } from '@/lib/utils'
+import { approvalExpired } from '@/lib/approvalExpiry'
 import { useApp } from '@/store/app'
 import { useSwarm } from '@/store/swarm'
 import type { FileChange } from '@/types'
@@ -57,7 +58,23 @@ export function ApplyDialog() {
   const [results, setResults] = useState<WriteOutcome[] | null>(null)
   const [fatal, setFatal] = useState<string | null>(null)
   const [pending, setPending] = useState<string | null>(null)
+  const [pendingExpiresAt, setPendingExpiresAt] = useState<number | null>(null)
   const [desktopIntent, setDesktopIntent] = useState(false)
+  const [nowMs, setNowMs] = useState(Date.now)
+  const [reviewVersion, setReviewVersion] = useState(0)
+  const expiresAt = results ? null : pendingExpiresAt ?? staged?.info.expiresAt ?? null
+  const expired = approvalExpired(expiresAt, nowMs)
+
+  // Wall-clock checks survive a suspended tab or sleeping desktop. No timer grants authority.
+  useEffect(() => {
+    if (!open || expiresAt === null) return
+    const update = () => setNowMs(Date.now())
+    update()
+    const timer = window.setInterval(update, 1000)
+    window.addEventListener('focus', update)
+    document.addEventListener('visibilitychange', update)
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', update); document.removeEventListener('visibilitychange', update) }
+  }, [open, expiresAt])
 
   useEffect(() => {
     setStaged(null)
@@ -88,8 +105,9 @@ export function ApplyDialog() {
     setResults(null)
     setFatal(null)
     setPending(null)
+    setPendingExpiresAt(null)
     setDesktopIntent(false)
-    if (staged?.info.status === 'desktop_confirmation_required') { setPending(staged.info.id); setDesktopIntent(true) }
+    if (staged?.info.status === 'desktop_confirmation_required') { setPending(staged.info.id); setPendingExpiresAt(staged.info.expiresAt); setDesktopIntent(true) }
     setExisting({})
     setChoice({})
     setPicked(new Set())
@@ -108,7 +126,7 @@ export function ApplyDialog() {
       setLoading(false)
     })()
     return () => { cancelled = true }
-  }, [open, proposals, root, staged])
+  }, [open, proposals, root, staged, reviewVersion])
 
   const rows = useMemo<Row[]>(
     () =>
@@ -153,8 +171,14 @@ export function ApplyDialog() {
   }
 
   const selected = rows.filter((r) => picked.has(r.path) && !r.error && !r.unresolved)
-  const canRequest = run?.source === 'live' && run.status === 'completed' && run.reviewVerdict === 'approved' && !replaying && !stageLoading && (!reviewApprovalId || !!staged)
+  const canRequest = run?.source === 'live' && run.status === 'completed' && run.reviewVerdict === 'approved' && !replaying && !stageLoading && !expired && (!reviewApprovalId || !!staged)
+  const reviewFreshRevision = () => {
+    // Return to the current proposal and reload baselines. Staging and sending still need a new click.
+    setPending(null); setPendingExpiresAt(null); setDesktopIntent(false); setStaged(null); setFatal(null)
+    setNowMs(Date.now()); setReviewVersion((v) => v + 1); setOpen(true)
+  }
   const apply = async (telegram = false) => {
+    if (approvalExpired(expiresAt, Date.now())) { setNowMs(Date.now()); setFatal('This approval expired. Review current files before requesting a fresh revision.'); return }
     if (!root || !run || !canRequest) return
     setApplying(true)
     setFatal(null)
@@ -163,9 +187,14 @@ export function ApplyDialog() {
       if (telegram) {
         const { invoke } = await import('@tauri-apps/api/core')
         setPending(approval.id)
-        const multi = await invoke<{ ownerId: number | null }>('tg_dashboard')
-        try { await invoke(multi.ownerId ? 'tg_request_approval' : 'telegram_request_approval', { approvalId: approval.id }) }
-        catch (error) { setPending(null); throw error }
+        setPendingExpiresAt(approval.expiresAt)
+        setNowMs(Date.now())
+        try {
+          if (approvalExpired(approval.expiresAt, Date.now())) throw new Error('This approval expired. Review current files before requesting a fresh revision.')
+          const multi = await invoke<{ ownerId: number | null }>('tg_dashboard')
+          await invoke(multi.ownerId ? 'tg_request_approval' : 'telegram_request_approval', { approvalId: approval.id })
+        }
+        catch (error) { setPending(null); setPendingExpiresAt(null); throw error }
       } else setResults(await applyFiles(approval.id))
     }
     catch (e) { setFatal(e instanceof Error ? e.message : String(e)) }
@@ -180,6 +209,7 @@ export function ApplyDialog() {
         if (payload.id === pending) {
           if (payload.status === 'desktop_confirmation_required') { setDesktopIntent(true); setFatal(null); return }
           setPending(null)
+          setPendingExpiresAt(null)
           setDesktopIntent(false)
           if (payload.outcomes?.length) { setResults(payload.outcomes); setFatal(null) }
           else setFatal(`Zero's Telegram decision: ${payload.status}. Reopen review to compare the current files.`)
@@ -208,7 +238,7 @@ export function ApplyDialog() {
                   {root ? <>→ {root}</> : 'No project folder chosen — workers can only write inside a folder you approve'}
                 </p>
               </div>
-              {fsAvailable() && !reviewApprovalId && <Button variant="outline" size="sm" onClick={chooseFolder}><FolderOpen className="h-3.5 w-3.5" />{root ? 'Change folder' : 'Choose folder'}</Button>}
+              {fsAvailable() && !reviewApprovalId && <Button variant="outline" size="sm" disabled={!!pending} onClick={chooseFolder}><FolderOpen className="h-3.5 w-3.5" />{root ? 'Change folder' : 'Choose folder'}</Button>}
               <Button variant="ghost" size="icon" onClick={() => setOpen(false)} aria-label="Close"><X className="h-4 w-4" /></Button>
             </header>
 
@@ -229,7 +259,7 @@ export function ApplyDialog() {
                           onClick={() => setActive(r.path)}
                           className={cn('flex cursor-pointer items-center gap-2 rounded-xl border px-2.5 py-2 transition-colors', active === r.path ? 'border-azure-hi/50 bg-azure/10' : 'border-transparent hover:bg-white/[0.04]')}
                         >
-                          <input type="checkbox" className="accent-[#3b82ff]" disabled={!!staged || !!r.error || r.unresolved || !r.existing} checked={picked.has(r.path) && !r.unresolved} onClick={(e) => e.stopPropagation()} onChange={() => toggle(r.path)} aria-label={`Apply ${r.path}`} />
+                          <input type="checkbox" className="accent-[#3b82ff]" disabled={!!staged || !!pending || !!r.error || r.unresolved || !r.existing} checked={picked.has(r.path) && !r.unresolved} onClick={(e) => e.stopPropagation()} onChange={() => toggle(r.path)} aria-label={`Apply ${r.path}`} />
                           <div className="min-w-0 flex-1">
                             <p className="truncate font-mono text-[11.5px] text-ink" title={r.path}>{r.path}</p>
                             <p className="flex items-center gap-1.5 text-[10px]" style={{ color: ROLE_META[r.change.role].color }}>
@@ -250,7 +280,7 @@ export function ApplyDialog() {
                       <span className="flex items-center gap-1 text-warn"><AlertTriangle className="h-3 w-3" />Several workers proposed this file — choose which version to use:</span>
                       {current.versions.map((v) => (
                         <button
-                          key={v.workerId} onClick={() => pick(current.path, v.workerId)}
+                          key={v.workerId} disabled={!!pending || !!staged} onClick={() => pick(current.path, v.workerId)}
                           className={cn('rounded-md border px-2 py-0.5 transition-colors', choice[current.path] === v.workerId ? 'border-azure-hi/60 bg-azure/25 text-white' : 'border-line text-ink-2 hover:border-line-hi')}
                         >
                           {ROLE_META[v.role].short} · {v.additions} lines
@@ -279,7 +309,7 @@ export function ApplyDialog() {
             )}
 
             {staged && <p className="border-t hairline px-5 py-2 text-xs text-ink-2">Immutable staged revision {staged.info.id} · project {staged.info.projectId} · {staged.info.risk} risk</p>}
-            {(!canRequest || pending) && <p className="border-t hairline px-5 py-2 text-xs text-warn">{stageLoading ? 'Loading exact staged revision…' : pending ? `${desktopIntent ? 'Telegram intent recorded · desktop confirmation required' : 'Awaiting Zero on Telegram'} · revision ${pending}` : 'Apply requires a completed live run, passed review, and Zero’s native approval. Replay and simulation are read-only.'}</p>}
+            {(!canRequest || pending) && <p role="status" className="border-t hairline px-5 py-2 text-xs text-warn">{stageLoading ? 'Loading exact staged revision…' : expired ? `Approval expired · revision ${pending ?? staged?.info.id}. Review current files before requesting a fresh revision. Nothing will be resent automatically.` : pending ? `${desktopIntent ? 'Telegram intent recorded · desktop confirmation required' : 'Awaiting Zero on Telegram'} · revision ${pending}${expiresAt !== null ? ` · expires ${new Date(expiresAt * 1000).toLocaleTimeString()}` : ''}` : 'Apply requires a completed live run, passed review, and Zero’s native approval. Replay and simulation are read-only.'}</p>}
             {(fatal || results) && (
               <div className="max-h-[48%] overflow-y-auto border-t hairline px-5 py-3 text-[12px]">
                 {fatal && <p className="text-bad">{fatal}</p>}
@@ -308,7 +338,8 @@ export function ApplyDialog() {
                   : `${selected.length} of ${rows.length} selected${rows.some((r) => r.unresolved) ? ' · conflicts need a version chosen' : ''}. Nothing is written until you apply.`}
               </p>
               <div className="flex gap-2">
-                {desktopIntent && pending && <Button variant="primary" disabled={applying} onClick={async () => { setApplying(true); setFatal(null); try { setResults(await applyFiles(pending)); setPending(null); setDesktopIntent(false) } catch (e) { setFatal(String(e)) } finally { setApplying(false) } }}>Confirm staged revision on desktop</Button>}
+                {(expired || (!!reviewApprovalId && !stageLoading && !staged && !!fatal)) && <Button variant="outline" disabled={applying || stageLoading} onClick={reviewFreshRevision}>Review a fresh revision</Button>}
+                {desktopIntent && pending && <Button variant="primary" disabled={applying || expired} onClick={async () => { if (approvalExpired(expiresAt, Date.now())) { setNowMs(Date.now()); setFatal('This approval expired. Review current files before requesting a fresh revision.'); return } setApplying(true); setFatal(null); try { setResults(await applyFiles(pending)); setPending(null); setPendingExpiresAt(null); setDesktopIntent(false) } catch (e) { setFatal(String(e)) } finally { setApplying(false) } }}>Confirm staged revision on desktop</Button>}
                 <Button variant="ghost" onClick={() => setOpen(false)}>{results ? 'Done' : 'Cancel'}</Button>
                 {!results && (
                   <><Button variant="outline" disabled={!canRequest || !root || !selected.length || applying || loading || !!pending} onClick={() => void apply(true)}>Ask via Telegram</Button>
