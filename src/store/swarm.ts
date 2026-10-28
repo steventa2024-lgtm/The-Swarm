@@ -10,7 +10,7 @@ import { saveRun } from '@/persistence/runStore'
 import { MAX_ATTACHMENTS } from '@/lib/attachments'
 import type { Attachment, Run, RunMode, RunStatus, Template } from '@/types'
 import { useApp } from './app'
-import { recordFrame, recoverFlight } from '@/persistence/flightRecorder'
+import { recordFrame, recoverFlight, listFlights } from '@/persistence/flightRecorder'
 import { seedAgents, seedProviders } from '@/data/seed'
 import { skillFor } from '@/data/skills'
 import { teamFor } from '@/data/team'
@@ -77,7 +77,13 @@ export const useSwarm = create<SwarmState>()((set, get) => ({
   runIsLive: false,
   replaying: false,
   recorderError: null,
-  recover: async () => { const run = await recoverFlight(); if (run && !get().run) set({ run, replaying: true }) },
+  recover: async () => {
+    const ids = await listFlights()
+    const recovered = await Promise.all(ids.slice(0, 20).map((id) => recoverFlight(id)))
+    const projectRuns: Record<string, Run> = {}
+    for (const run of recovered) if (run && !projectRuns[run.task.projectId]) projectRuns[run.task.projectId] = run
+    if (!get().run && Object.keys(projectRuns).length) set({ projectRuns, run: projectRuns[useApp.getState().activeProjectId] ?? Object.values(projectRuns)[0], replaying: true })
+  },
 
   setApplyOpen: (applyOpen) => set({ applyOpen, reviewApprovalId: null }),
   openApproval: (reviewApprovalId) => set({ reviewApprovalId, applyOpen: true }),
@@ -100,7 +106,7 @@ export const useSwarm = create<SwarmState>()((set, get) => ({
     }),
   recordOwnerDecision: (runId, revision, status, channel) => set((s) => {
     if (!s.run || s.run.id !== runId) return s
-    const run = { ...s.run, events: [{ id: crypto.randomUUID(), at: Date.now() - s.run.startedAt, kind: 'system' as const, taskId: s.run.task.id, message: `Zero via ${channel}: ${status} · revision ${revision}` }, ...s.run.events] }
+    const run = { ...s.run, ownerDecision: { status, revision, channel }, events: [{ id: crypto.randomUUID(), at: Date.now() - s.run.startedAt, kind: 'system' as const, taskId: s.run.task.id, message: `Zero via ${channel}: ${status} · revision ${revision}` }, ...s.run.events] }
     if (useApp.getState().preferences.storeRunLogs) void recordFrame(run).catch(() => set({ recorderError: 'Flight recorder could not save. Check local storage space.' }))
     return { run }
   }),

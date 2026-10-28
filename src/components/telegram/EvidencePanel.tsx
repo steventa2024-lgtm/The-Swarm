@@ -27,6 +27,7 @@ export function EvidencePanel() {
     <div className="flex flex-wrap gap-2">
       <Button size="sm" disabled={!inTauri() || busy} onClick={() => void act('capture_evidence', { record: false })}>Capture Swarm window…</Button>
       <Button size="sm" disabled={!inTauri() || busy} onClick={() => void act('capture_evidence', { record: true })}>Record 15 seconds…</Button>
+      <Button size="sm" disabled={!inTauri() || busy} onClick={() => void act('media_policy_report')}>Create safe policy report</Button>
       <Button size="sm" disabled={!inTauri() || busy || !project?.root} onClick={() => void act('media_import', { root: project?.root })}>Import project evidence…</Button>
       {capturing && <button className="rounded-lg border border-red-400 bg-red-950 px-3 text-xs text-white" onClick={() => void telegramInvoke('capture_stop')}>● Capturing own window · Stop</button>}
     </div>

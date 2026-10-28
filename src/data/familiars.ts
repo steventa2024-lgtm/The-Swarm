@@ -14,7 +14,7 @@ export type MascotState = 'idle' | 'thinking' | 'working' | 'reviewing' | 'waiti
 export const MASCOT_STATES: MascotState[] = ['idle', 'thinking', 'working', 'reviewing', 'waiting_approval', 'completed', 'failed', 'offline']
 /** Auth health is displayed separately; visual task state comes only from actual executions. */
 export function mascotState(id: FamiliarId, providers: Provider[], run: Run | null, replay: boolean): MascotState {
-  if (id === 'hq') return run?.source === 'live' && !replay && run.status === 'completed' && run.reviewVerdict === 'approved' ? 'waiting_approval' : 'idle'
+  if (id === 'hq') return run?.source === 'live' && !replay && run.status === 'completed' && run.reviewVerdict === 'approved' && !['applied', 'rejected'].includes(run.ownerDecision?.status ?? '') ? 'waiting_approval' : 'idle'
   const p = providers.find((p) => p.id === FAMILIARS.find((f) => f.id === id)?.provider)
   if (run?.source === 'live') {
     const workers = run.workers.filter((w) => w.providerId === p?.id)

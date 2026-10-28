@@ -341,7 +341,7 @@ export const liveDriver: OrchestratorDriver = {
       }
       const provider = ctx.providers.find((p) => p.id === w.providerId)!
       const toolRunId = uid('tool')
-      event('info', `${provider.kind === 'cli' ? 'Signed-in CLI' : 'Model request'} started: ${provider.name}`, w)
+      event('info', `Provider request queued: ${provider.name}`, w)
       run.events[0].toolRunId = toolRunId
       let text = ''
       w.tokensIn = Math.ceil(messages.reduce((n, m) => n + m.content.length, 0) / 4)
@@ -353,7 +353,9 @@ export const liveDriver: OrchestratorDriver = {
       for (let attempt = 0; ; attempt++) {
         try {
           if (ctx.modelPolicy && ++calls > ctx.modelPolicy.maxCalls) throw new Error('Task request cap reached; checkpoint retained')
-          result = await providerQueue(provider.id, signal, () => adapterFor(provider).chat(provider, {
+          result = await providerQueue(provider.id, signal, () => {
+            throwIfAborted(); event('info', `Provider request started: ${provider.name}`, w); run.events[0].toolRunId = toolRunId
+            return adapterFor(provider).chat(provider, {
             model: w.modelId, effort: w.reasoningEffort, runId: run.id, projectId: req.projectId, timeoutSeconds: ctx.modelPolicy?.timeoutSeconds, messages, maxTokens, json: opts.json, signal,
             onDelta: (d) => {
               text += d
@@ -363,7 +365,7 @@ export const liveDriver: OrchestratorDriver = {
               opts.onText?.(text)
               scheduleEmit()
             },
-          }))
+          }) })
           break
         } catch (e) {
           if (isAbort(e) || text.length > 0 || attempt >= MAX_RETRIES || !isRetryable(e)) throw e
@@ -415,7 +417,7 @@ export const liveDriver: OrchestratorDriver = {
       return out
     }
 
-    const skillOf = (w: Worker) => skillFor(w.role, ctx.agents.find((a) => a.id === w.agentId)?.skill)
+    const skillOf = (w: Worker) => `${skillFor(w.role, ctx.agents.find((a) => a.id === w.agentId)?.skill)}\nAuthority: Zero, the founder, alone approves or rejects applying any file. Task/file ownership does not grant approval. Agents only propose; never claim another approver.`
 
     // What the planner hands each agent. Workers see this instead of the whole master prompt.
     interface Brief { brief: string; spec: string; acceptance: string[]; skip: boolean; reason: string }
@@ -593,7 +595,7 @@ export const liveDriver: OrchestratorDriver = {
 
       // Truncated context must never silently approve unseen proposed contents.
       let remaining = 24_000
-      let complete = true
+      let complete = req.prompt.length <= 8000
       const digest = workers
         .filter((w) => !briefs.get(w.id)?.skip)
         .map((w) => {
@@ -608,7 +610,7 @@ export const liveDriver: OrchestratorDriver = {
         .join('\n\n')
       const system = `${skillOf(reviewer)}\n\nReply with a single JSON object and nothing else.`
       const user =
-        `Master prompt: ${req.prompt.slice(0, 1500)}${req.prompt.length > 1500 ? '…' : ''}\n\n` +
+        `Master prompt: ${req.prompt.slice(0, 8000)}${req.prompt.length > 8000 ? '…' : ''}\n\n` +
         `${contract ? `Shared contract:\n${contract}\n\n` : ''}${digest}\n\n` +
         'JSON shape: {"verdict":"approve"|"changes_requested","summary":["<3 short bullets on what was delivered>"],' +
         '"issues":["<file + problem; may be empty>"],"nextSteps":["<1-3 concrete next steps>"]}'
@@ -625,8 +627,9 @@ export const liveDriver: OrchestratorDriver = {
       const failed = workers.filter((w) => w.status === 'error' || w.status === 'waiting').length
       const worked = workers.filter((w) => !briefs.get(w.id)?.skip)
       const issues = strList(verdict?.issues)
+      if (req.prompt.length > 8000) issues.push('Master task exceeded the 8,000-character review context. Split the task before approval.')
       if (!complete) issues.push('Proposal exceeds the 24,000-character review limit. Split the task and review smaller proposals.')
-      const approved = verdict?.verdict === 'approve' && failed === 0 && issues.length === 0
+      const approved = req.prompt.length <= 8000 && verdict?.verdict === 'approve' && failed === 0 && issues.length === 0
       run.reviewVerdict = approved ? 'approved' : 'changes_requested'
       const summary = strList(verdict?.summary)
       refreshFiles()

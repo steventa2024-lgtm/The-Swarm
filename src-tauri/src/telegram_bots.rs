@@ -1719,8 +1719,8 @@ async fn flush_queue(app: &AppHandle) -> Result<(), String> {
         let (mut item, chat, intro) = selected;
         let event = &item.event;
         let id = &item.bot_id;
-        let _ = intro;
         let text = crate::communication::message(&event.kind, &event.project_name, &event.task_title, &event.agent_id, &event.status);
+        let text = if intro == "The Swarm" { text } else { format!("{text}\n\nPersonality / {}", intro.split(" [").next().unwrap_or("Team style")) };
         let result =
             verified_api(app, id, "sendMessage", json!({"chat_id":chat,"text":text})).await;
         let state = app.state::<TelegramBots>();
@@ -1768,7 +1768,9 @@ pub async fn tg_send_media(app: AppHandle, artifact_id: String) -> Result<(),Str
         (token("hq")?,destination(&inner)?)
     };
     let (method,field)=match artifact.kind.as_str(){"photo"=>("sendPhoto","photo"),"video"=>("sendVideo","video"),_=>("sendDocument","document")};
+    let receipt={let state=app.state::<TelegramBots>();let mut inner=state.0.lock().unwrap();let id=delivery(&mut inner,"hq",method,"queued",&artifact_id,None);persist(&app,&inner.persisted)?;id};
     let form=reqwest::multipart::Form::new().text("chat_id",chat.to_string()).text("protect_content","true")
+        .text("reply_markup",json!({"inline_keyboard":[[{"text":"Confirm received","callback_data":format!("receipt:{receipt}")}]]}).to_string())
         .text("caption",format!("Zero, here is approved evidence: {}. This is an actual local artifact; its verification status is described in the desktop report.",crate::communication::label(&artifact.name,"Project evidence")))
         .part(field,reqwest::multipart::Part::bytes(bytes).file_name(artifact.name).mime_str(&artifact.mime).map_err(|_|"Unsupported media MIME")?);
     let client=reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).timeout(Duration::from_secs(90)).build().map_err(|_|"Media client unavailable")?;
@@ -1779,7 +1781,7 @@ pub async fn tg_send_media(app: AppHandle, artifact_id: String) -> Result<(),Str
         Ok(())
     }.await;
     let state=app.state::<TelegramBots>();let mut inner=state.0.lock().unwrap();
-    delivery(&mut inner,"hq",method,if result.is_ok(){"sent"}else{"failed"},&artifact_id,result.as_ref().err().cloned());
+    if let Some(d)=inner.persisted.deliveries.iter_mut().find(|d|d.id==receipt){if d.status!="received"{d.status=if result.is_ok(){"sent"}else{"failed"}.into();}d.error=result.as_ref().err().cloned();}
     persist(&app,&inner.persisted)?;drop(inner);changed(&app);result
 }
 #[tauri::command]

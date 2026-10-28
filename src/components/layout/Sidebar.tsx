@@ -15,6 +15,8 @@ const NAV: { id: PageId; label: string; icon: LucideIcon }[] = [
   { id: 'swarm', label: 'Swarm', icon: Workflow },
   { id: 'projects', label: 'Projects', icon: FolderKanban },
   { id: 'agents', label: 'Agent Team', icon: Users },
+  { id: 'approvals', label: 'Approvals', icon: FolderKanban },
+  { id: 'history', label: 'History & Recorder', icon: Workflow },
   { id: 'models', label: 'Model Control', icon: Sparkles },
   { id: 'mascots', label: 'Mascot Studio', icon: Sparkles },
   { id: 'knowledge', label: 'Knowledge', icon: BookMarked },
@@ -51,6 +53,7 @@ function NavButton({ item, active, onClick }: { item: { id: PageId; label: strin
   return (
     <Tip label={item.label} side="right">
       <button
+        aria-label={item.label}
         onClick={onClick}
         className={cn(
           'group relative flex h-10 w-full items-center gap-3 rounded-xl px-3 text-[13px] font-medium transition-colors',
@@ -101,7 +104,7 @@ export function Sidebar() {
         </div>
       </div>
 
-      <nav className="flex flex-col gap-1">
+      <nav className="flex min-h-0 flex-col gap-1 overflow-y-auto">
         {NAV.map((n) => <NavButton key={n.id} item={n} active={page === n.id} onClick={() => setPage(n.id)} />)}
       </nav>
 

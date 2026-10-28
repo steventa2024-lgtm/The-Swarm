@@ -1,3 +1,5 @@
+import { ApprovalsPage } from '@/pages/ApprovalsPage'
+import { HistoryPage } from '@/pages/HistoryPage'
 import { CaptureIndicator } from '@/components/CaptureIndicator'
 import { MascotStudioPage } from '@/pages/MascotStudioPage'
 import { ModelControlPage } from '@/pages/ModelControlPage'
@@ -76,6 +78,8 @@ export function AppShell() {
                   transition={{ duration: 0.18 }}
                 >
                   {page === 'mascots' && <MascotStudioPage />}
+                  {page === 'approvals' && <ApprovalsPage />}
+                  {page === 'history' && <HistoryPage />}
                   {page === 'models' && <ModelControlPage />}
                   {page === 'swarm' && <SwarmPage booting={!booted} />}
                   {page === 'projects' && <ProjectsPage />}

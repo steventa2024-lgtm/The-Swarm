@@ -1,0 +1,16 @@
+# DeepSeek secure setup
+
+DeepSeek is the **only** permitted separately metered inference API. Generic provider transport rejects every non-loopback endpoint even if a legacy paid-API flag was enabled. DeepSeek credentials cannot pass through the generic bridge or renderer key setter.
+
+1. Open Model Control or Integrations → DeepSeek. Choose **Save key in native dialog**. On Windows enter the key only into the masked password field. The OS credential vault stores it; React, SQLite and logs never receive it. Replace disables the current paid session. Delete also removes its credential. macOS native key entry/build remains unverified and explicitly unavailable here.
+2. **Test models & balance** sends authenticated GET requests to `/models` and `/user/balance` on `https://api.deepseek.com`. It requests no inference. A successful metadata check does not enable paid use. Balance errors stay unavailable; a positive reported balance and authenticated catalog are required before enabling.
+3. Select `deepseek-flash` only if present in that authenticated list. No legacy aliases or retired model substitutions are used. Pro requires an additional native approval for each explicitly selected request. No automatic Pro escalation exists.
+4. Approve cloud egress for the specific project, whose root must already be native-approved. Then separately **Authorize paid session** when you want chargeable use. Both permissions reset with the process. Saving a key or clicking Test never grants them. Obtain Zero's approval before the first live smoke test.
+
+Default strict application limit: **$0.50 per UTC day**, one concurrent call, 40 calls/day, ≤32 KB input and ≤4096 output tokens. The daily cap is editable from $0.01–$5.00 only through native owner confirmation. The estimate reserves a UTF-8-byte upper bound plus framing, peak cache-miss/output prices and a 2× safety margin before launching. Reservations are committed atomically and kept after interrupted or unreported usage; the cap never assumes a cache discount or successful refund. Three errors open the session circuit breaker. New process resets connection authority, not the durable daily reservation.
+
+Bounded SSE streaming retains actual response model and provider usage where reported. Cancellation stops accepting output and retains the full reservation because in-flight usage may bill. These app controls do **not** replace provider account spending controls. No automatic top-ups or Search/Fetch tools are wired into this adapter. Price snapshots expire and block new inference until reverified in code. The current snapshot uses Flash $0.30 input/$1.20 output and Pro $1.32/$3.96 per million tokens at peak cache-miss rates, verified 28 October 2026, before the 2× reserve.
+
+The implementation and SSE/budget tests work without a key. Actual key entry, authenticated model/balance evidence and chargeable inference remain manual until Zero supplies credentials and authorization. The intended $20–$25 starting balance is a user intention, never fabricated account data.
+
+Official sources: [pricing](https://api-docs.deepseek.com/quick_start/pricing/), [chat/SSE protocol](https://api-docs.deepseek.com/api/create-chat-completion/), [balance](https://api-docs.deepseek.com/api/get-user-balance/).

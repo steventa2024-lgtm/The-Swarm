@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest'
 import { seedAgents, seedProviders } from '@/data/seed'
 import { createRun } from '@/engine/simulator'
 import { useSwarm } from '@/store/swarm'
-vi.mock('@/persistence/flightRecorder', () => ({ recordFrame: vi.fn(), recoverFlight: vi.fn() }))
+vi.mock('@/persistence/flightRecorder', () => ({ recordFrame: vi.fn(), recoverFlight: vi.fn(), listFlights: vi.fn().mockResolvedValue([]) }))
 it('project switching restores its actual snapshot without re-running tools or granting apply', () => {
   const run = createRun({ prompt: 'fixture', projectId: 'one', mode: 'balanced', requestedAgents: 2, attachments: [] }, { providers: seedProviders, agents: seedAgents, maxWorkers: 2, getSpeed: () => 1 }).run
   useSwarm.setState({ projectRuns: { one: run } })

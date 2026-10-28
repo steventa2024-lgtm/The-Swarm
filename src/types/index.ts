@@ -221,6 +221,7 @@ export interface FinalOutput {
 }
 
 export interface Run {
+  ownerDecision?: { status: string; revision: string; channel: string }
   source?: 'live' | 'simulation'
   reviewVerdict?: 'approved' | 'changes_requested'
   id: string
@@ -327,6 +328,8 @@ export interface Preferences {
 }
 
 export type PageId =
+  | 'approvals'
+  | 'history'
   | 'models'
   | 'mascots'
   | 'swarm'

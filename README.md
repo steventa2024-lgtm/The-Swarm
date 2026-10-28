@@ -113,3 +113,20 @@ Telegram upgrade validation: **192 TypeScript tests passed**, **40 Rust tests pa
 | Persistence and migration | `src/persistence/flightRecorder.ts`, `src/store/app.ts`, `swarm.ts` |
 
 The [legacy README](docs/LEGACY-README.md) and [original testing guide](docs/TESTING.md) describe the pre-upgrade build; their historical verification claims do not apply to new integrations.
+# Hardlight command center upgrade
+
+The existing Tauri/Rust + React workspace now includes eight Hardlight Familiars, native evidence capture and Telegram uploads, Model Control, local subscription usage guards and a dedicated opt-in DeepSeek adapter. Generic paid inference APIs are blocked. Existing planning, workers, review, approved-root access, preview and flight recording remain in place.
+
+Start with [the audited baseline](docs/swarm-upgrade-baseline.md), [model controls](docs/model-control-center.md), [Telegram evidence](docs/telegram-rich-messaging.md), [DeepSeek setup](docs/deepseek-setup.md), [artwork and motion](docs/hardlight-familiars.md) and [approval/rollback boundaries](docs/security-and-approval.md). The current verification report is [here](docs/swarm-upgrade-verification.md).
+
+### Short supervised demo
+
+1. Launch `artifacts/The Swarm Hardlight.exe`. Keep the prior executable for rollback. On Telegram Bots choose **Reconnect saved bots**; existing tokens and pairing remain intact.
+2. Open **Model Control**, refresh supported catalogs, choose an explicit model/effort or retain a verified CLI default, and set a small task call cap. Unknown remaining subscription allowance is shown as unavailable. Keep DeepSeek OFF unless you deliberately configure and authorize it.
+3. Select a harmless approved empty fixture folder. Submit: “Create an offline review fixture. Two workers: QA owns index.html with a semantic heading Awaiting Zero; docs owns README.md describing owner-only apply. Both workers must contribute their own file. No scripts, network or dependencies. Keep each file under 15 lines. Never apply files.”
+4. Watch actual assignments, requested/observed model evidence, graph, Team Chat and reviewer. Telegram sends readable summaries of those real events. Open Preview and inspect the generated files. No files are applied by completing a run.
+5. On Telegram Bots → Evidence, explicitly authorize a screenshot or 15-second own-window MP4. Inspect the local artifact and choose Send to Telegram. Confirm actual phone playback yourself. `/preview`, `/recording` and `/files` retrieve only already-authorized evidence.
+6. Open Review, inspect the exact diff and checks, and ask HQ for approval. Zero alone rejects or approves. High-risk proposals require native confirmation after Telegram intent. Replay and restart never restore approval authority. A rejection must leave the fixture unchanged.
+
+Run `npm test`, `npm run build`, and `cargo test --manifest-path src-tauri/Cargo.toml --lib`. Build the Windows development executable with `npm run tauri -- build --debug --no-bundle`. Responsive browser checks are `scripts/hardlight-ui-smoke.cjs`, alongside the existing UI smoke scripts; set `SWARM_PLAYWRIGHT_PATH` to an installed Playwright module if needed. Signed-in metadata discovery is an explicit ignored Rust test; subscription inference tests stay opt-in.
+

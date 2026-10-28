@@ -1,0 +1,15 @@
+# Model Control Center
+
+Open **Model Control** from the sidebar, task composer, Settings or familiar inspector. Agent roles and providers remain editable under Agent Team. Routing never silently changes an unavailable provider to a paid endpoint.
+
+Precedence: explicit next-task provider choice → agent manual lock → project preference → global provider default → configured verified provider default. Explicit task choices are owner configuration. A missing selected model or unsupported effort stops the call; automatic model escalation and API fallback are disabled. Manual Lock requires an explicit task choice or agent lock. Economy serializes workers; Balanced and Performance retain the chosen models and bounded concurrency, with the independent reviewer retained in every profile.
+
+Codex discovery uses the installed signed-in CLI's documented `app-server` `model/list` method and returns actual model IDs and supported reasoning efforts. Catalog refresh makes no inference request. Cursor uses `agent --list-models`. Other CLI catalogs remain unavailable until a supported discovery path is implemented; no guessed model catalog is substituted. Local discovery lists installed models and filters known cloud-hosted identifiers. Explicit CLI models must be re-discovered each desktop session; stale persisted choices cannot bypass native catalog validation.
+
+Per-call model flags are invocation-scoped (`--model`, plus Codex `-c model_reasoning_effort=...`). No global CLI config is edited. Requested model/effort and observed model are kept separate in worker evidence. Where the CLI exposes no actual model, the inspector says unavailable. Default aliases do not prove an internal model identity.
+
+One FIFO request per provider is active at a time. UI task caps are 1–8 calls and 15–300 second call timeouts; native subscription guards cap 40 starts/provider/UTC day and eight starts/task, counting failed attempts. Starts are durably recorded before launch, so a crash does not erase observed use. The native subscription daily/concurrency caps are conservative fixed ceilings in this release. They are not provider quotas. The ledger reports locally observed starts and reported tokens; unknown remaining allowance/reset times are explicitly unavailable. No shared pool is asserted for this account without account-specific evidence.
+
+Cursor third-party and Auto inference are blocked by the new billing policy. Refresh its catalog, select a discovered Cursor-owned model, check its inclusion and disable on-demand billing in your account yourself, then use the native **Confirm included usage** dialog. This records *user-configured entitlement*, not live account quota. No billing setting is changed by The Swarm. Claude's exhausted allowance stays a blocker; Google personal-plan migration and Grok authentication are not assumed complete.
+
+References: [Codex model/list](https://learn.chatgpt.com/docs/app-server#models), [Cursor CLI parameters](https://cursor.com/docs/cli/reference/parameters), [Cursor account-plan distinctions](https://cursor.com/docs/models-and-pricing). Verified 28 October 2026.

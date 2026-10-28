@@ -44,8 +44,8 @@ export async function clearFlights() {
   for (const id of await listFlights()) await appStorage.removeItem(key(id))
   await appStorage.removeItem(INDEX); signatures.clear()
 }
-export async function recoverFlight(): Promise<Run | null> {
-  const id = (await listFlights())[0]
+export async function recoverFlight(selectedId?: string): Promise<Run | null> {
+  const id = selectedId ?? (await listFlights())[0]
   if (!id) return null
   const last = (await loadFlight(id))?.frames.at(-1)
   if (!last || !['planning', 'running', 'reviewing', 'paused'].includes(last.status)) return null

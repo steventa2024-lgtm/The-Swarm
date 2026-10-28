@@ -15,6 +15,8 @@ pub struct ApprovalInfo {
 #[derive(Clone, Serialize)] #[serde(rename_all = "camelCase")]
 pub struct StagedProposal { pub info: ApprovalInfo, pub root: String, pub files: Vec<WriteFile> }
 fn now() -> u64 { SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() }
+#[tauri::command]
+pub fn approval_pending(app:AppHandle)->Vec<ApprovalInfo>{app.state::<ApprovalBook>().pending()}
 fn reference(value: Option<String>, fallback: &str) -> Result<String, String> {
     let value = value.unwrap_or_else(|| fallback.to_string());
     if value.is_empty() || value.len() > 100 || !value.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_:".contains(&b)) { return Err("Approval context must use a bounded project/task identifier".into()) }

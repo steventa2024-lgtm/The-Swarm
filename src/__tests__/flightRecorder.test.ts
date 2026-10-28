@@ -20,6 +20,14 @@ it('does not recover completed sessions', async () => {
   const {run} = createRun({prompt:'Build a page',projectId:'p',mode:'balanced',requestedAgents:2,attachments:[]}, {providers:seedProviders,agents:seedAgents,maxWorkers:2,getSpeed:()=>1})
   run.status='completed'; await recordFrame(run); expect(await recoverFlight()).toBeNull()
 })
+it('recovers each interrupted project independently without replaying authority', async () => {
+  const make = (projectId: string) => createRun({prompt:'Small fixture',projectId,mode:'balanced',requestedAgents:2,attachments:[]}, {providers:seedProviders,agents:seedAgents,maxWorkers:2,getSpeed:()=>1}).run
+  const one = make('one'), two = make('two')
+  await recordFrame(one); await recordFrame(two)
+  expect((await recoverFlight(one.id))?.task.projectId).toBe('one')
+  expect((await recoverFlight(two.id))?.task.projectId).toBe('two')
+  expect((await recoverFlight(one.id))?.status).toBe('stopped')
+})
 it('reports failed checkpoints and can retry the same frame after storage recovers', async () => {
   const {run} = createRun({prompt:'Build a page',projectId:'p',mode:'balanced',requestedAgents:2,attachments:[]}, {providers:seedProviders,agents:seedAgents,maxWorkers:2,getSpeed:()=>1})
   failWrites = true

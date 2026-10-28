@@ -45,6 +45,8 @@ export function PreviewPane({ run }: { run: Run | null }) {
   const [nonce, setNonce] = useState(0)
   const token = useRef<string | undefined>(undefined)
   const frame = useRef<HTMLIFrameElement>(null)
+  const previewRoot = useRef<HTMLDivElement>(null)
+  useEffect(() => { if (run) previewRoot.current?.scrollIntoView({ block: 'start' }) }, [run?.id])
 
   const files = useMemo(() => previewableFiles(run), [run])
   const plain: PreviewFile[] = useMemo(() => files.map((f) => ({ path: f.path, content: f.content })), [files])
@@ -101,7 +103,7 @@ export function PreviewPane({ run }: { run: Run | null }) {
   }
 
   return (
-    <div className="flex h-[min(640px,calc(100vh-290px))] min-h-[420px] flex-col gap-2.5">
+    <div ref={previewRoot} className="flex h-[min(640px,calc(100vh-290px))] min-h-[420px] flex-col gap-2.5">
       <div className="flex items-center gap-2">
         <Segmented size="sm" value={tab} onChange={setTab} options={[
           { value: 'preview', label: <span className="flex items-center gap-1.5"><MonitorPlay className="h-3.5 w-3.5" />Preview</span> },
