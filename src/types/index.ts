@@ -115,6 +115,9 @@ export interface Worker {
   elapsedMs: number
   startedAt?: number // ms offset from run start
   endedAt?: number
+  /** Absolute execution boundaries for event chronology across workflow pauses. */
+  startedAtEpoch?: number
+  endedAtEpoch?: number
   checklist: ChecklistItem[]
 }
 
@@ -308,7 +311,8 @@ export interface Integration {
 
 export interface Preferences {
   modelPolicy?: import('@/engine/modelPolicy').ModelPolicy
-  mascotMotion?: 'off' | 'subtle' | 'cinematic'
+  mascotMotion?: 'off' | 'subtle' | 'full' | 'cinematic'
+  mascotQuality?: 'low' | 'medium' | 'high' | 'cinematic'
   teamVersion?: number
   paidApisEnabled?: boolean
   personalities?: boolean

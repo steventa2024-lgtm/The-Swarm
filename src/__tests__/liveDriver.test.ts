@@ -3,6 +3,7 @@ import { seedAgents } from '@/data/seed'
 import type { DriverContext } from '@/engine/driver'
 import type { ChatRequest } from '@/providers'
 import type { Provider, Run } from '@/types'
+import { DEFAULT_MODEL_POLICY } from '@/engine/modelPolicy'
 
 // The driver uses window timers; give the node test environment one.
 ;(globalThis as unknown as { window: unknown }).window = globalThis
@@ -10,7 +11,7 @@ import type { Provider, Run } from '@/types'
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const abortError = () => new DOMException('Aborted', 'AbortError')
 
-const calls: { role: 'planner' | 'worker' | 'reviewer'; messages: ChatRequest['messages'] }[] = []
+const calls: { role: 'planner' | 'worker' | 'reviewer'; messages: ChatRequest['messages']; model: string }[] = []
 let plannerSkips: string[] = []
 /** How many upcoming worker calls should fail, and with what message. */
 let failures = 0
@@ -27,7 +28,7 @@ vi.mock('@/providers', () => ({
     chat: async (_p: Provider, req: ChatRequest) => {
       const system = req.messages[0].content
       const role = req.json ? (system.includes('Reviewer') ? 'reviewer' : 'planner') : 'worker'
-      calls.push({ role, messages: req.messages })
+      calls.push({ role, messages: req.messages, model: req.model })
       if (req.signal?.aborted) throw abortError()
       if (role === 'worker' && failures > 0) { failures--; throw new Error(failMessage) }
 
@@ -85,6 +86,35 @@ describe('live driver — token-saving behaviour', () => {
     expect(await until(() => latest?.status === 'completed')).toBe(true)
     expect(calls.map((c) => c.role)).toEqual(['planner', 'worker', 'worker', 'worker', 'reviewer'])
     expect(latest!.finalOutput?.checks.every((c) => c.passed)).toBe(true)
+    for (const worker of latest!.workers) {
+      expect(worker.startedAtEpoch).toBeGreaterThanOrEqual(latest!.startedAt)
+      expect(worker.endedAtEpoch).toBeGreaterThanOrEqual(worker.startedAtEpoch!)
+    }
+  })
+
+  it('task model overrides update actual request labels without publishing stale routing model names', async () => {
+    const oldModel = { ...provider.models[0], id: 'deepseek-coder:32b', label: 'DeepSeek Routing 32B' }
+    const selected = { ...provider.models[0], id: 'qwen2.5-coder:7b', label: 'Qwen2.5 Coder 7B' }
+    const configured: DriverContext = {
+      ...ctx(), providers: [{ ...provider, name: 'Ollama', models: [oldModel, selected] }],
+      agents: seedAgents.map((agent) => ({ ...agent, providerId: provider.id, modelId: oldModel.id })),
+      modelPolicy: { ...DEFAULT_MODEL_POLICY, task: { [provider.id]: { model: selected.id } } },
+    }
+    liveDriver.start(req(), configured, (run) => { latest = run })
+    expect(await until(() => latest?.status === 'completed')).toBe(true)
+    expect(calls).toHaveLength(5)
+    expect(calls.every((call) => call.model === selected.id)).toBe(true)
+    expect(latest!.workers.every((worker) => worker.modelLabel === selected.label && worker.modelId === selected.id && worker.requestedModel === selected.id)).toBe(true)
+    const requestEvents = latest!.events.filter((event) => /Provider request (queued|started):/.test(event.message))
+    expect(requestEvents).toHaveLength(calls.length * 2)
+    for (const event of requestEvents) {
+      expect(event.message).toContain('Ollama')
+      expect(event.message).toContain(selected.label)
+      expect(event.message).toContain(selected.id)
+    }
+    const allMessages = latest!.events.map((event) => event.message).join('\n')
+    expect(allMessages).not.toContain(oldModel.label)
+    expect(allMessages).not.toContain(oldModel.id)
   })
 
   it('shows only the planner the full master prompt; workers get their brief + contract', async () => {
@@ -109,6 +139,8 @@ describe('live driver — token-saving behaviour', () => {
     expect(qa.status).toBe('done')
     expect(qa.tokensIn + qa.tokensOut).toBe(0)
     expect(qa.recentAction).toMatch(/Skipped/)
+    expect(qa.startedAtEpoch).toBeUndefined() // No provider invocation occurred for a skipped role.
+    expect(qa.endedAtEpoch).toBeUndefined()
   })
 
   it('never skips every role', async () => {
@@ -165,6 +197,9 @@ describe('live driver — Stop', () => {
 
 describe('live driver — Pause / Resume', () => {
   it('holds the next stage while paused and continues on resume', async () => {
+    const actualNow = Date.now.bind(Date)
+    let pauseGap = 0
+    vi.spyOn(Date, 'now').mockImplementation(() => actualNow() + pauseGap)
     const ctl = start()
     expect(await until(() => workersWorking() > 0)).toBe(true)
     ctl.pause()
@@ -175,9 +210,17 @@ describe('live driver — Pause / Resume', () => {
     expect(calls.some((c) => c.role === 'reviewer')).toBe(false)
     expect(latest!.status).toBe('paused')
 
+    // Emulate a long suspended interval without waiting ten real minutes. The
+    // progress offsets stay compact; event timestamps must still use wall time.
+    pauseGap = 600_000
+    const resumedAt = Date.now()
     ctl.resume()
     expect(await until(() => latest?.status === 'completed')).toBe(true)
     expect(calls.some((c) => c.role === 'reviewer')).toBe(true)
+    const reviewer = latest!.workers.at(-1)!
+    expect(reviewer.startedAtEpoch).toBeGreaterThanOrEqual(resumedAt)
+    expect(reviewer.endedAtEpoch).toBeGreaterThanOrEqual(reviewer.startedAtEpoch!)
+    expect(reviewer.startedAtEpoch! - (latest!.startedAt + reviewer.startedAt!)).toBeGreaterThan(590_000)
   })
 
   it('stopping while paused releases the hold and ends the run', async () => {

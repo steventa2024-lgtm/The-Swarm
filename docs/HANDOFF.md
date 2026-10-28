@@ -1,5 +1,11 @@
 # The Swarm engineering handoff — 28 October 2026
 
+## Current 3D correction
+
+The prior image/CSS mascot work did not satisfy living 3D. The subsequent local correction adds actual articulated geometry for all eight characters, shared WebGL roster/inspector views, camera controls, procedural animation, GLB exports and real-event visual integration. See [the 3D acceptance record](hardlight-3d.md) for current source files, videos, tests, limitations and device checks still awaiting access. No new 3D changes have been pushed or merged without Zero's approval. Paid APIs remain off, and the earlier project fixture remains unapplied.
+
+## Published handoff snapshot before the 3D correction
+
 Branch: `feat/swarm-upgrade-handoff-2026-10-28`, created from `feat/hardlight-command-center` at `4e54b9a`. It carries the existing upgrade commits and this updated handoff. The application remains Tauri 2 / Rust, React / TypeScript, Zustand and SQLite.
 
 ## Owner instructions

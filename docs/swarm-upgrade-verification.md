@@ -1,5 +1,7 @@
 # Upgrade verification — 28 October 2026 UTC
 
+This records the earlier implementation snapshots. For the subsequent replacement of image/CSS mascots with actual articulated geometry, use the [3D correction acceptance record](hardlight-3d.md); earlier static-art verification is not 3D acceptance.
+
 The current continuation checklist is in [HANDOFF.md](HANDOFF.md). Later entries below supersede earlier pending-request snapshots; none grants owner approval.
 
 Branch: `feat/hardlight-command-center`. Starting checkpoint `2f22ff7`; communication checkpoint `a3dd6c9`; integrated foundation `c5df4a1`; prior evidence checkpoint `a380bb7`. Later verification/UI checkpoints are listed in Git history. No merge, deployment, publication, purchase or bot profile update was performed.

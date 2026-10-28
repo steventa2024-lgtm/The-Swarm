@@ -1,0 +1,94 @@
+{
+  "format": "GLB 2.0",
+  "runtime": "Procedural articulated hierarchies in src/components/agents/three; exports are editable rest-pose snapshots. Procedural animation is in source, not baked GLB clips.",
+  "models": [
+    {
+      "id": "hq",
+      "file": "hq.glb",
+      "bytes": 58520,
+      "sha256": "291180cf22d314ed1d99de2a2876a5d66b995734d990ff22438732f17bb8f70d",
+      "nodes": 175,
+      "meshes": 21,
+      "images": 0,
+      "animations": 0,
+      "skins": 0
+    },
+    {
+      "id": "codex",
+      "file": "codex.glb",
+      "bytes": 53960,
+      "sha256": "f30b81cf7c3c8e228f106b0034e913dfafc4a9b381995bc1d4285de2fb4bd733",
+      "nodes": 251,
+      "meshes": 24,
+      "images": 0,
+      "animations": 0,
+      "skins": 0
+    },
+    {
+      "id": "claude",
+      "file": "claude.glb",
+      "bytes": 68188,
+      "sha256": "69121cd008c3a1c65c8728f1444c244f0c3f3ef1b25ae9bb8a288ef7b642acf7",
+      "nodes": 280,
+      "meshes": 20,
+      "images": 0,
+      "animations": 0,
+      "skins": 0
+    },
+    {
+      "id": "gemini",
+      "file": "gemini.glb",
+      "bytes": 55528,
+      "sha256": "a42c628849e1de9170c1e977a16d9fbf53978ac72adbc4719bef928677a1422c",
+      "nodes": 153,
+      "meshes": 25,
+      "images": 0,
+      "animations": 0,
+      "skins": 0
+    },
+    {
+      "id": "cursor",
+      "file": "cursor.glb",
+      "bytes": 56360,
+      "sha256": "bf370f510917fc48d9a3c89d266390c1895170451610deadbff05d8e3dc239c8",
+      "nodes": 153,
+      "meshes": 25,
+      "images": 0,
+      "animations": 0,
+      "skins": 0
+    },
+    {
+      "id": "grok",
+      "file": "grok.glb",
+      "bytes": 44660,
+      "sha256": "82b80cf4423100a1cfd116cdfaa99b36379a41bb5eef92d0eb1b22a93efcfb45",
+      "nodes": 143,
+      "meshes": 19,
+      "images": 0,
+      "animations": 0,
+      "skins": 0
+    },
+    {
+      "id": "deepseek",
+      "file": "deepseek.glb",
+      "bytes": 62292,
+      "sha256": "f00eefc60a3dbe40d0d07b04659bd9a879e9c0b70629b6f8265dbecebf5c6b88",
+      "nodes": 122,
+      "meshes": 18,
+      "images": 0,
+      "animations": 0,
+      "skins": 0
+    },
+    {
+      "id": "ollama",
+      "file": "ollama.glb",
+      "bytes": 64052,
+      "sha256": "0aa4ac47c5376336e5fb8c0eb9cec55885caf156cc09f7a0d7be4b843b68a625",
+      "nodes": 169,
+      "meshes": 18,
+      "images": 0,
+      "animations": 0,
+      "skins": 0
+    }
+  ]
+}

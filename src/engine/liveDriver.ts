@@ -340,8 +340,10 @@ export const liveDriver: OrchestratorDriver = {
         w.modelId = selected.model; w.requestedModel = selected.model; w.reasoningEffort = selected.effort
       }
       const provider = ctx.providers.find((p) => p.id === w.providerId)!
+      w.modelLabel = provider.models.find((model) => model.id === w.modelId)?.label ?? w.modelId
+      const requestLabel = `${provider.name} · ${w.modelLabel} (${w.modelId})`
       const toolRunId = uid('tool')
-      event('info', `Provider request queued: ${provider.name}`, w)
+      event('info', `Provider request queued: ${requestLabel}`, w)
       run.events[0].toolRunId = toolRunId
       let text = ''
       w.tokensIn = Math.ceil(messages.reduce((n, m) => n + m.content.length, 0) / 4)
@@ -354,7 +356,7 @@ export const liveDriver: OrchestratorDriver = {
         try {
           if (ctx.modelPolicy && ++calls > ctx.modelPolicy.maxCalls) throw new Error('Task request cap reached; checkpoint retained')
           result = await providerQueue(provider.id, signal, () => {
-            throwIfAborted(); event('info', `Provider request started: ${provider.name}`, w); run.events[0].toolRunId = toolRunId
+            throwIfAborted(); event('info', `Provider request started: ${requestLabel}`, w); run.events[0].toolRunId = toolRunId
             return adapterFor(provider).chat(provider, {
             model: w.modelId, effort: w.reasoningEffort, runId: run.id, projectId: req.projectId, timeoutSeconds: ctx.modelPolicy?.timeoutSeconds, messages, maxTokens, json: opts.json, signal,
             onDelta: (d) => {
@@ -429,7 +431,8 @@ export const liveDriver: OrchestratorDriver = {
     const runPlanner = async () => {
       planner.startedAt = 0
       throwIfAborted()
-      event('plan', `Planner (${planner.modelLabel}) is reading the master prompt`, planner)
+      planner.startedAtEpoch = Date.now()
+      event('plan', 'Planner is reading the master prompt', planner)
       await loadTree()
       const roleList = workers.map((w) => `- ${w.role}: ${ROLE_META[w.role].label}`).join('\n')
       const system = `${skillOf(planner)}\n\nReply with a single JSON object and nothing else.`
@@ -499,6 +502,7 @@ export const liveDriver: OrchestratorDriver = {
       const active = workers.filter((w) => !briefs.get(w.id)?.skip).length
       planner.status = 'done'
       planner.endedAt = run.elapsedMs
+      planner.endedAtEpoch = Date.now()
       planner.recentAction = 'Plan delivered'
       planner.summary = planSummary || `Split task into ${active} subtasks`
       planner.checklist.forEach((c) => { c.done = true })
@@ -525,9 +529,10 @@ export const liveDriver: OrchestratorDriver = {
 
       w.status = 'working'
       w.startedAt = run.elapsedMs
+      w.startedAtEpoch = Date.now()
       w.recentAction = 'Reading brief'
       st.status = 'active'
-      event('info', `${w.name} picked up “${st.title}” via ${w.modelLabel}`, w)
+      event('info', `${w.name} picked up “${st.title}”`, w)
 
       const system =
         `${skillOf(w)}\n\n` +
@@ -572,6 +577,7 @@ export const liveDriver: OrchestratorDriver = {
         w.checklist.forEach((c) => { c.done = true })
         w.status = 'done'
         w.endedAt = run.elapsedMs
+        w.endedAtEpoch = Date.now()
         w.recentAction = 'Finished — awaiting review'
         st.status = 'done'
         event('success', `${w.name} finished “${st.title}”`, w)
@@ -579,6 +585,7 @@ export const liveDriver: OrchestratorDriver = {
         if (isAbort(e)) throw e
         w.status = 'error'
         w.endedAt = run.elapsedMs
+        w.endedAtEpoch = Date.now()
         w.recentAction = errMsg(e)
         st.status = 'blocked'
         event('warning', `${w.name} failed: ${errMsg(e)}`, w)
@@ -589,6 +596,7 @@ export const liveDriver: OrchestratorDriver = {
       throwIfAborted()
       reviewer.status = 'working'
       reviewer.startedAt = run.elapsedMs
+      reviewer.startedAtEpoch = Date.now()
       reviewer.summary = 'Checking the work against each agent\'s acceptance criteria'
       reviewer.recentAction = 'Reading worker output'
       event('review', `All workers finished — ${reviewer.name} starting review`, reviewer)
@@ -620,6 +628,7 @@ export const liveDriver: OrchestratorDriver = {
       reviewer.checklist.forEach((c) => { c.done = true })
       reviewer.status = 'done'
       reviewer.endedAt = run.elapsedMs
+      reviewer.endedAtEpoch = Date.now()
       reviewer.recentAction = 'Review finished'
       reviewer.summary = complete ? 'Proposed output reviewed' : 'Review incomplete: output exceeded review context limit'
 
@@ -676,12 +685,16 @@ export const liveDriver: OrchestratorDriver = {
         } else {
           phase = 'failed'
           const active = run.workers.find((w) => w.status === 'working')
-          if (active) { active.status = 'error'; active.recentAction = errMsg(e) }
+          if (active) { active.status = 'error'; active.endedAt = run.elapsedMs; active.endedAtEpoch = Date.now(); active.recentAction = errMsg(e) }
           event('warning', errMsg(e))
         }
       } finally {
         if (phase === 'stopped') {
-          for (const w of run.workers) if (w.status === 'working' || w.status === 'queued') w.status = 'idle'
+          const stoppedAt = Date.now()
+          for (const w of run.workers) if (w.status === 'working' || w.status === 'queued') {
+            if (w.startedAtEpoch !== undefined && w.endedAtEpoch === undefined) { w.endedAt = run.elapsedMs; w.endedAtEpoch = stoppedAt }
+            w.status = 'idle'
+          }
         }
         finished = true
         window.clearInterval(ticker)

@@ -4,11 +4,13 @@ An upgrade of the existing **Tauri 2 / Rust / React / Zustand / SQLite** applica
 
 This working copy extends the existing Swarm source; the original source and installed app were not replaced. Start with the [current engineering handoff](docs/HANDOFF.md) for verified behavior, provider limits and the unapplied demo. The original documentation is retained in [docs/LEGACY-README.md](docs/LEGACY-README.md).
 
+The [3D correction and acceptance record](docs/hardlight-3d.md) supersedes the earlier static-image mascot implementation. The roster and inspector now render eight articulated mesh characters, with [reusable GLB exports](public/hardlight/models/README.md). Device acceptance remains open where direct Windows inspection or Mac hardware testing is unavailable.
+
 ## Run
 
 Windows prerequisites: Node 20.19+ or 22.12+, Rust, MSVC build tools and WebView2.
 
-The current handoff branch is `feat/swarm-upgrade-handoff-2026-10-28`, continuing the Telegram and Hardlight upgrades without resetting their history. The local standalone development executable is `artifacts/The Swarm Hardlight.exe`. It embeds the dashboard and runs without a Vite server. Executables and local evidence are ignored by Git; build from source on a new checkout. This is a development build, not a signed installer.
+The current handoff branch is `feat/swarm-upgrade-handoff-2026-10-28`, continuing the Telegram and Hardlight upgrades without resetting their history. Build the latest desktop executable from source; the Windows debug output is `src-tauri/target/debug/zeropulse-swarm.exe`. Older local Hardlight executables are retained for rollback. Standalone builds embed the dashboard and run without a Vite server. Executables and local evidence are ignored by Git. This is a development build, not a signed installer.
 
 ```powershell
 npm ci
@@ -117,13 +119,13 @@ The [legacy README](docs/LEGACY-README.md) and [original testing guide](docs/TES
 
 For the latest implementation, verified checks, provider limits and exact unapplied demo status, start with the [engineering handoff — 28 October 2026](docs/HANDOFF.md).
 
-The existing Tauri/Rust + React workspace now includes eight Hardlight Familiars, native evidence capture and Telegram uploads, Model Control, local subscription usage guards and a dedicated opt-in DeepSeek adapter. Generic paid inference APIs are blocked. Existing planning, workers, review, approved-root access, preview and flight recording remain in place.
+The existing Tauri/Rust + React workspace includes eight procedural, articulated 3D Hardlight Familiars, native evidence capture and Telegram uploads, Model Control, local subscription usage guards and a dedicated opt-in DeepSeek adapter. Generic paid inference APIs are blocked. Existing planning, workers, review, approved-root access, preview and flight recording remain in place. The old concept portraits are references and labeled fallback media, not the primary characters.
 
 Start with [the audited baseline](docs/swarm-upgrade-baseline.md), [model controls](docs/model-control-center.md), [Telegram evidence](docs/telegram-rich-messaging.md), [DeepSeek setup](docs/deepseek-setup.md), [artwork and motion](docs/hardlight-familiars.md) and [approval/rollback boundaries](docs/security-and-approval.md). The current verification report is [here](docs/swarm-upgrade-verification.md).
 
 ### Short supervised demo
 
-1. Launch `artifacts/The Swarm Hardlight.exe`. Keep the prior executable for rollback. On Telegram Bots choose **Reconnect saved bots**; existing tokens and pairing remain intact.
+1. Build and launch the latest desktop executable. Keep the prior executable for rollback. On Telegram Bots choose **Reconnect saved bots**; existing tokens and pairing remain intact.
 2. Open **Model Control**, refresh supported catalogs, choose an explicit model/effort or retain a verified CLI default, and set a small task call cap. Unknown remaining subscription allowance is shown as unavailable. Keep DeepSeek OFF unless you deliberately configure and authorize it.
 3. Select a harmless approved empty fixture folder. Submit: “Create an offline review fixture. Two workers: QA owns index.html with a semantic heading Awaiting Zero; docs owns README.md describing owner-only apply. Both workers must contribute their own file. No scripts, network or dependencies. Keep each file under 15 lines. Never apply files.”
 4. Watch actual assignments, requested/observed model evidence, graph, Team Chat and reviewer. Telegram sends readable summaries of those real events. Open Preview and inspect the generated files. No files are applied by completing a run.
@@ -131,4 +133,10 @@ Start with [the audited baseline](docs/swarm-upgrade-baseline.md), [model contro
 6. Open Review, inspect the exact diff and checks, and ask HQ for approval. Zero alone rejects or approves. High-risk proposals require native confirmation after Telegram intent. Replay and restart never restore approval authority. A rejection must leave the fixture unchanged.
 
 Run `npm test`, `npm run build`, and `cargo test --manifest-path src-tauri/Cargo.toml --lib`. Build the Windows development executable with `npm run tauri -- build --debug --no-bundle`. Responsive browser checks are `scripts/hardlight-ui-smoke.cjs`, alongside the existing UI smoke scripts; set `SWARM_PLAYWRIGHT_PATH` to an installed Playwright module if needed. Signed-in metadata discovery is an explicit ignored Rust test; subscription inference tests stay opt-in.
+
+### Inspect the living 3D team
+
+Open **Mascot Studio** to inspect Codex first. Drag to orbit, scroll/pinch to zoom, and use front/side/rear camera buttons. Select the other seven characters, preview the eight states, or choose **All eight · team preview**. These demonstrations are explicitly previews and make no AI calls. Low/Medium/High/Cinematic quality is independent of Off/Subtle/Full motion; system reduced motion overrides animation.
+
+The live roster uses one shared scissored renderer. Click a character for the existing agent inspector, or open the optional **3D command center**. Real assignments, dependency transfers, review outcomes and native pending approvals drive visual cues; history, replay and simulation cannot claim live activity. Optional milestone recordings remain native-consented, manually inspected and manually sent. No bot profile photos are changed.
 

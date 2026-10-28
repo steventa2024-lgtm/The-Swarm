@@ -1,0 +1,21 @@
+const {chromium}=require(process.env.SWARM_PLAYWRIGHT_PATH||'playwright');
+const fs=require('node:fs/promises');const path=require('node:path');
+(async()=>{
+ const browser=await chromium.launch({channel:'msedge',headless:true,args:['--enable-unsafe-swiftshader']});
+ const context=await browser.newContext({viewport:{width:1600,height:1150}});const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('http://127.0.0.1:1421',{waitUntil:'networkidle'});await page.getByRole('button',{name:'Mascot Studio',exact:true}).click();await page.waitForFunction(()=>window.__familiar3d?.scene.getObjectByName('wolf-head'));
+ await page.getByLabel('Motion preference',{exact:true}).selectOption('full');await page.waitForTimeout(1000);
+ const dir=path.resolve('artifacts/3d/screencast');await fs.mkdir(dir,{recursive:true});const frames=[];const writes=[];const cdp=await context.newCDPSession(page);
+ cdp.on('Page.screencastFrame',frame=>{const index=frames.length;const name=`frame-${String(index).padStart(5,'0')}.jpg`;frames.push({name,timestamp:frame.metadata.timestamp});const write=fs.writeFile(path.join(dir,name),Buffer.from(frame.data,'base64')).then(()=>cdp.send('Page.screencastFrameAck',{sessionId:frame.sessionId}));writes.push(write)});
+ await cdp.send('Page.startScreencast',{format:'jpeg',quality:88,maxWidth:1600,maxHeight:1150,everyNthFrame:1});
+ await page.getByRole('button',{name:'front',exact:true}).click();await page.waitForTimeout(2600);
+ await page.getByRole('button',{name:'side',exact:true}).click();await page.waitForTimeout(2600);
+ await page.getByRole('button',{name:'rear',exact:true}).click();await page.waitForTimeout(2400);
+ await page.getByRole('button',{name:'three quarter',exact:true}).click();await page.getByLabel('Preview state',{exact:true}).selectOption('thinking');await page.waitForTimeout(3000);
+ await page.getByLabel('Preview state',{exact:true}).selectOption('working');await page.waitForTimeout(4000);
+ const box=await page.locator('.familiar-3d-stage canvas').boundingBox();await page.mouse.move(box.x+box.width*.55,box.y+box.height*.5);await page.mouse.down();await page.mouse.move(box.x+box.width*.7,box.y+box.height*.52,{steps:45});await page.mouse.up();await page.waitForTimeout(1600);
+ await page.getByLabel('Preview state',{exact:true}).selectOption('completed');await page.waitForTimeout(3000);await page.getByRole('button',{name:'front',exact:true}).click();await page.waitForTimeout(1500);
+ await cdp.send('Page.stopScreencast');await Promise.all(writes);const stats=await page.getByLabel('3D renderer diagnostics').innerText();
+ const concat=frames.map((f,i)=>`file '${f.name}'\nduration ${i+1<frames.length?Math.max(.001,frames[i+1].timestamp-f.timestamp):.04}`).join('\n');await fs.writeFile(path.join(dir,'frames.txt'),concat+'\n');
+ const report={frames:frames.length,durationSeconds:frames.at(-1).timestamp-frames[0].timestamp,renderer:'Actual browser viewport screencast of the local WebGL renderer. Software SwiftShader, preview states only. No simulated video frames.',errors,stats};await fs.writeFile('artifacts/3d/recording.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report));await context.close();await browser.close();if(errors.length)process.exitCode=1;
+})().catch(e=>{console.error(e);process.exit(1)});
