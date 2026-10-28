@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { AlertTriangle, CheckCircle2, FolderOpen, Loader2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { applyFiles, stageFiles, fsAvailable, pickFolder, readText, type ReadResult, type WriteOutcome } from '@/lib/fsBridge'
+import { applyFiles, stageFiles, getStagedProposal, fsAvailable, pickFolder, readText, type ReadResult, type WriteOutcome, type StagedProposal } from '@/lib/fsBridge'
 import { collapse, diffLines, type DiffResult } from '@/lib/diff'
 import { ROLE_META } from '@/lib/meta'
 import { cn } from '@/lib/utils'
@@ -40,10 +40,13 @@ export function ApplyDialog() {
   const open = useSwarm((s) => s.applyOpen)
   const setOpen = useSwarm((s) => s.setApplyOpen)
   const run = useSwarm((s) => s.run)
+  const reviewApprovalId = useSwarm((s) => s.reviewApprovalId)
   const replaying = useSwarm((s) => s.replaying)
   const project = useApp((s) => s.projects.find((p) => p.id === (run?.task.projectId ?? s.activeProjectId)))
   const updateProject = useApp((s) => s.updateProject)
-  const root = project?.root
+  const [staged, setStaged] = useState<StagedProposal | null>(null)
+  const [stageLoading, setStageLoading] = useState(false)
+  const root = staged?.root ?? project?.root
 
   const [existing, setExisting] = useState<Record<string, Existing>>({})
   const [choice, setChoice] = useState<Record<string, string>>({}) // path -> workerId
@@ -54,15 +57,30 @@ export function ApplyDialog() {
   const [results, setResults] = useState<WriteOutcome[] | null>(null)
   const [fatal, setFatal] = useState<string | null>(null)
   const [pending, setPending] = useState<string | null>(null)
+  const [desktopIntent, setDesktopIntent] = useState(false)
+
+  useEffect(() => {
+    setStaged(null)
+    if (!open || !reviewApprovalId) { setStageLoading(false); return }
+    let cancelled = false
+    setStageLoading(true)
+    void getStagedProposal(reviewApprovalId).then((proposal) => {
+      if (cancelled) return
+      if (proposal.info.runId !== run?.id || proposal.info.projectId !== run.task.projectId) throw new Error('This staged revision belongs to another run or project.')
+      setStaged(proposal)
+    }).catch((e) => { if (!cancelled) setFatal(String(e)) }).finally(() => { if (!cancelled) setStageLoading(false) })
+    return () => { cancelled = true }
+  }, [open, reviewApprovalId, run?.id, run?.task.projectId])
 
   const proposals = useMemo<Proposal[]>(() => {
     const byPath = new Map<string, FileChange[]>()
-    for (const f of run?.fileChanges ?? []) {
+    const changes = staged ? staged.files.map((f): FileChange => ({ path: f.path, content: f.content, role: 'reviewer', workerId: 'staged-revision', type: f.expected === null ? 'added' : 'modified', additions: f.content.split('\n').length, deletions: 0 })) : run?.fileChanges ?? []
+    for (const f of changes) {
       if (f.content === undefined) continue
       byPath.set(f.path, [...(byPath.get(f.path) ?? []), f])
     }
     return [...byPath.entries()].map(([path, versions]) => ({ path, versions }))
-  }, [run?.fileChanges])
+  }, [run?.fileChanges, staged])
 
   // Load current file contents whenever the dialog opens (or the folder changes).
   useEffect(() => {
@@ -70,6 +88,8 @@ export function ApplyDialog() {
     setResults(null)
     setFatal(null)
     setPending(null)
+    setDesktopIntent(false)
+    if (staged?.info.status === 'desktop_confirmation_required') { setPending(staged.info.id); setDesktopIntent(true) }
     setExisting({})
     setChoice({})
     setPicked(new Set())
@@ -88,7 +108,7 @@ export function ApplyDialog() {
       setLoading(false)
     })()
     return () => { cancelled = true }
-  }, [open, proposals, root])
+  }, [open, proposals, root, staged])
 
   const rows = useMemo<Row[]>(
     () =>
@@ -133,17 +153,19 @@ export function ApplyDialog() {
   }
 
   const selected = rows.filter((r) => picked.has(r.path) && !r.error && !r.unresolved)
-  const canRequest = run?.source === 'live' && run.status === 'completed' && run.reviewVerdict === 'approved' && !replaying
+  const canRequest = run?.source === 'live' && run.status === 'completed' && run.reviewVerdict === 'approved' && !replaying && !stageLoading && (!reviewApprovalId || !!staged)
   const apply = async (telegram = false) => {
     if (!root || !run || !canRequest) return
     setApplying(true)
     setFatal(null)
     try {
-      const approval = await stageFiles(root, selected.map((r) => ({ path: r.path, content: r.change.content ?? '', expected: r.existing?.state === 'ok' && r.existing.read.exists ? r.existing.read.content : null })), run.id, run.reviewVerdict === 'approved')
+      const approval = staged?.info ?? await stageFiles(root, selected.map((r) => ({ path: r.path, content: r.change.content ?? '', expected: r.existing?.state === 'ok' && r.existing.read.exists ? r.existing.read.content : null })), run.id, run.reviewVerdict === 'approved', run.task.projectId, run.task.id)
       if (telegram) {
         const { invoke } = await import('@tauri-apps/api/core')
-        await invoke('telegram_request_approval', { approvalId: approval.id })
         setPending(approval.id)
+        const multi = await invoke<{ ownerId: number | null }>('tg_dashboard')
+        try { await invoke(multi.ownerId ? 'tg_request_approval' : 'telegram_request_approval', { approvalId: approval.id }) }
+        catch (error) { setPending(null); throw error }
       } else setResults(await applyFiles(approval.id))
     }
     catch (e) { setFatal(e instanceof Error ? e.message : String(e)) }
@@ -156,7 +178,9 @@ export function ApplyDialog() {
     void import('@tauri-apps/api/event').then(async ({ listen }) => {
       const stop = await listen<{ id: string; status: string; outcomes?: WriteOutcome[] }>('swarm-approval', ({ payload }) => {
         if (payload.id === pending) {
+          if (payload.status === 'desktop_confirmation_required') { setDesktopIntent(true); setFatal(null); return }
           setPending(null)
+          setDesktopIntent(false)
           if (payload.outcomes?.length) { setResults(payload.outcomes); setFatal(null) }
           else setFatal(`Zero's Telegram decision: ${payload.status}. Reopen review to compare the current files.`)
         }
@@ -184,7 +208,7 @@ export function ApplyDialog() {
                   {root ? <>→ {root}</> : 'No project folder chosen — workers can only write inside a folder you approve'}
                 </p>
               </div>
-              {fsAvailable() && <Button variant="outline" size="sm" onClick={chooseFolder}><FolderOpen className="h-3.5 w-3.5" />{root ? 'Change folder' : 'Choose folder'}</Button>}
+              {fsAvailable() && !reviewApprovalId && <Button variant="outline" size="sm" onClick={chooseFolder}><FolderOpen className="h-3.5 w-3.5" />{root ? 'Change folder' : 'Choose folder'}</Button>}
               <Button variant="ghost" size="icon" onClick={() => setOpen(false)} aria-label="Close"><X className="h-4 w-4" /></Button>
             </header>
 
@@ -205,7 +229,7 @@ export function ApplyDialog() {
                           onClick={() => setActive(r.path)}
                           className={cn('flex cursor-pointer items-center gap-2 rounded-xl border px-2.5 py-2 transition-colors', active === r.path ? 'border-azure-hi/50 bg-azure/10' : 'border-transparent hover:bg-white/[0.04]')}
                         >
-                          <input type="checkbox" className="accent-[#3b82ff]" disabled={!!r.error || r.unresolved || !r.existing} checked={picked.has(r.path) && !r.unresolved} onClick={(e) => e.stopPropagation()} onChange={() => toggle(r.path)} aria-label={`Apply ${r.path}`} />
+                          <input type="checkbox" className="accent-[#3b82ff]" disabled={!!staged || !!r.error || r.unresolved || !r.existing} checked={picked.has(r.path) && !r.unresolved} onClick={(e) => e.stopPropagation()} onChange={() => toggle(r.path)} aria-label={`Apply ${r.path}`} />
                           <div className="min-w-0 flex-1">
                             <p className="truncate font-mono text-[11.5px] text-ink" title={r.path}>{r.path}</p>
                             <p className="flex items-center gap-1.5 text-[10px]" style={{ color: ROLE_META[r.change.role].color }}>
@@ -254,7 +278,8 @@ export function ApplyDialog() {
               </div>
             )}
 
-            {(!canRequest || pending) && <p className="border-t hairline px-5 py-2 text-xs text-warn">{pending ? `Awaiting Zero on Telegram · revision ${pending}` : 'Apply requires a completed live run, passed review, and Zero’s native approval. Replay and simulation are read-only.'}</p>}
+            {staged && <p className="border-t hairline px-5 py-2 text-xs text-ink-2">Immutable staged revision {staged.info.id} · project {staged.info.projectId} · {staged.info.risk} risk</p>}
+            {(!canRequest || pending) && <p className="border-t hairline px-5 py-2 text-xs text-warn">{stageLoading ? 'Loading exact staged revision…' : pending ? `${desktopIntent ? 'Telegram intent recorded · desktop confirmation required' : 'Awaiting Zero on Telegram'} · revision ${pending}` : 'Apply requires a completed live run, passed review, and Zero’s native approval. Replay and simulation are read-only.'}</p>}
             {(fatal || results) && (
               <div className="max-h-[48%] overflow-y-auto border-t hairline px-5 py-3 text-[12px]">
                 {fatal && <p className="text-bad">{fatal}</p>}
@@ -283,6 +308,7 @@ export function ApplyDialog() {
                   : `${selected.length} of ${rows.length} selected${rows.some((r) => r.unresolved) ? ' · conflicts need a version chosen' : ''}. Nothing is written until you apply.`}
               </p>
               <div className="flex gap-2">
+                {desktopIntent && pending && <Button variant="primary" disabled={applying} onClick={async () => { setApplying(true); setFatal(null); try { setResults(await applyFiles(pending)); setPending(null); setDesktopIntent(false) } catch (e) { setFatal(String(e)) } finally { setApplying(false) } }}>Confirm staged revision on desktop</Button>}
                 <Button variant="ghost" onClick={() => setOpen(false)}>{results ? 'Done' : 'Cancel'}</Button>
                 {!results && (
                   <><Button variant="outline" disabled={!canRequest || !root || !selected.length || applying || loading || !!pending} onClick={() => void apply(true)}>Ask via Telegram</Button>

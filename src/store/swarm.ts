@@ -28,6 +28,7 @@ interface SwarmState {
   attachments: Attachment[]
   selectedId: string | null
   applyOpen: boolean
+  reviewApprovalId: string | null
   /** True when the current run calls real providers (so its tokens count toward the budget). */
   runIsLive: boolean
   replaying: boolean
@@ -35,6 +36,7 @@ interface SwarmState {
   recover: () => Promise<void>
 
   setApplyOpen: (open: boolean) => void
+  openApproval: (id: string) => void
   /** Shows a previously saved run (read-only history). Ignored while a run is in progress. */
   openRun: (run: Run, replay?: boolean) => boolean
   /** Adds (or updates) a real check result on the final output. */
@@ -65,18 +67,20 @@ export const useSwarm = create<SwarmState>()((set, get) => ({
   attachments: [],
   selectedId: null,
   applyOpen: false,
+  reviewApprovalId: null,
   runIsLive: false,
   replaying: false,
   recorderError: null,
   recover: async () => { const run = await recoverFlight(); if (run && !get().run) set({ run, replaying: true }) },
 
-  setApplyOpen: (applyOpen) => set({ applyOpen }),
+  setApplyOpen: (applyOpen) => set({ applyOpen, reviewApprovalId: null }),
+  openApproval: (reviewApprovalId) => set({ reviewApprovalId, applyOpen: true }),
   openRun: (run, replay = false) => {
     const cur = get().run
     if (!get().replaying && cur && ['planning', 'running', 'reviewing', 'paused'].includes(cur.status)) return false
     controller?.dispose()
     controller = null
-    set({ run, runIsLive: false, replaying: replay, selectedId: null, applyOpen: false })
+    set({ run, runIsLive: false, replaying: replay, selectedId: null, applyOpen: false, reviewApprovalId: null })
     return true
   },
   recordCheck: (label, passed) =>
@@ -170,6 +174,6 @@ export const useSwarm = create<SwarmState>()((set, get) => ({
   reset: () => {
     controller?.dispose()
     controller = null
-    set({ run: null, selectedId: null, applyOpen: false, replaying: false, runIsLive: false })
+    set({ run: null, selectedId: null, applyOpen: false, reviewApprovalId: null, replaying: false, runIsLive: false })
   },
 }))

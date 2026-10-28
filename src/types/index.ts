@@ -326,6 +326,7 @@ export type PageId =
   | 'knowledge'
   | 'templates'
   | 'integrations'
+  | 'telegram'
   | 'settings'
   | 'support'
 

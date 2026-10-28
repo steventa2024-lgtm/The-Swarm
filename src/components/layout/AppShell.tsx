@@ -15,12 +15,21 @@ import { useSwarm } from '@/store/swarm'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 import { inTauri } from '@/providers/transport'
+import { TelegramBotsPage } from '@/pages/TelegramBotsPage'
+import { connectTelegramWorkspace } from '@/lib/telegramBridge'
 
 export function AppShell() {
   const page = useApp((s) => s.page)
   const hydrated = useApp((s) => s.hydrated)
   const reduceMotion = useApp((s) => s.preferences.reduceMotion)
   const [booted, setBooted] = useState(false)
+  useEffect(() => {
+    if (!inTauri()) return
+    let disposed = false
+    let disconnect: (() => void) | undefined
+    void connectTelegramWorkspace().then((stop) => { if (disposed) stop(); else disconnect = stop }).catch(() => {})
+    return () => { disposed = true; disconnect?.() }
+  }, [])
   useEffect(() => {
     if (!inTauri()) return
     let disposed = false; let unlisten: (() => void) | undefined
@@ -66,6 +75,7 @@ export function AppShell() {
                   {page === 'knowledge' && <KnowledgePage />}
                   {page === 'templates' && <TemplatesPage />}
                   {page === 'integrations' && <IntegrationsPage />}
+                  {page === 'telegram' && <TelegramBotsPage />}
                   {page === 'settings' && <SettingsPage />}
                   {page === 'support' && <SupportPage />}
                 </motion.div>

@@ -8,7 +8,7 @@ This is a source copy of `C:\Users\steve\OneDrive\Desktop\The Swarm by ZeroPulse
 
 Windows prerequisites: Node 20.19+ or 22.12+, Rust, MSVC build tools and WebView2.
 
-This workspace also includes a compiled standalone development executable at `artifacts/The Swarm.exe`. It embeds the dashboard and runs without a Vite server. It is a development build, not a signed installer.
+The Telegram upgrade is developed on `feat/telegram-multi-bot`, based on the existing repository history with the previous local upgrades preserved. The updated standalone development executable is `artifacts/The Swarm Telegram.exe`. It embeds the dashboard and runs without a Vite server. It is a development build, not a signed installer.
 
 ```powershell
 npm ci
@@ -59,23 +59,25 @@ Official references: [Codex auth](https://developers.openai.com/codex/auth), [Co
 
 ## Optional Telegram setup
 
-1. Create a bot with **@BotFather**, then start its private chat. Obtain your numeric user ID and private chat ID through a trusted Telegram client/bot workflow. Group chats are rejected.
-2. In **Integrations → Telegram**, save `TELEGRAM_BOT_TOKEN` and a separate random `TELEGRAM_WEBHOOK_TOKEN` (32–256 letters, digits, `_` or `-`). Secrets use Windows Credential Manager with environment fallback; entry fields clear after saving and secrets are never persisted in frontend settings. Do not paste them into tasks or source files.
-3. Expose only `http://127.0.0.1:9462/telegram/webhook` through an HTTPS reverse proxy/tunnel. Preserve `X-Telegram-Bot-Api-Secret-Token` and configure a short body-read timeout at the proxy. Do not expose Vite, IPC or other local services.
-4. Enter Zero’s IDs and `https://your-host/telegram/webhook`, then **Register webhook**. Zero confirms the binding natively. “Webhook registered” means Telegram accepted registration; send `/status` in the private chat to verify actual delivery. Registration failures remain visible.
-5. Review a completed proposal in the app, then **Ask via Telegram**. The bot sends a file count and opaque revision ID with **Approve & apply** / **Reject** buttons. Automatic messages contain no prompts, code, filenames, credentials or model-written summaries.
-6. Send a voice note to the bot; **Refresh status & inbox** and play it locally. For outbound voice, select and preview an OGG/MP3/M4A under 5 MB and confirm natively. Voice never authorizes changes and is not automatically transcribed or sent to AI services.
-7. Disconnect revokes local authority and removes the remote webhook. Local authority is revoked even if remote removal fails. Reconnect after restarting the app; old approval buttons are revoked.
+The dedicated **Telegram** page has HQ, Codex, Claude, Gemini, Cursor, Grok and a reserved Ollama slot. Use your existing bots; no bot creation is needed. **Local long polling** is the default transport. It requires no domain, tunnel, hosting, or paid service.
 
-Webhook validation checks the shared secret, exact numeric sender, private chat, body size, callback shape and single-use revision. Duplicate updates are acknowledged without repeating actions; a repeated approval cannot apply twice. `/status`, `/start`, `/help`, voice and revision buttons are supported. Arbitrary text never executes commands or grants approval. [Telegram Bot API documentation](https://core.telegram.org/bots/api).
+1. Save HQ's token in its masked credential field, **Test connection** against Telegram `getMe`, then **Start polling**. Repeat for each existing agent bot. Cursor and Grok's provisional identities require native confirmation if the actual username differs.
+2. Choose **Pair Zero**, send the one-time command in HQ's private chat, and confirm your captured numeric identity natively. Pair the selected private group using the bot-addressed command shown on screen.
+3. Send a test notification from HQ and one agent, then tap **Confirm received** in Telegram. The communications panel distinguishes a successful send from an authenticated receipt.
+4. Run the **harmless approval test**. Its revision cannot write files. Decide through HQ's buttons, inspect the audit, and verify that repeating the same callback cannot repeat the action.
+5. Run an engineering task for real notifications referencing actual project/task/run/event IDs. Configure permissions, frequency, quiet hours and optional personalities per bot. AI-provider availability remains separate from bot connectivity.
+
+Read the complete [Telegram activation and setup guide](docs/TELEGRAM-SETUP.md) for all six mappings, token replacement/removal, pairing, commands, receiver conflicts, queue/restart behavior and the tested/untested boundary. Tokens stay in Windows Credential Manager, never source, Git, SQLite or frontend persistence. Do not paste them into this conversation. Any token exposed in chat history should be rotated.
+
+The original HTTPS webhook and voice path remains in a folded advanced section. Stop polling before registering a webhook for the same bot; the new native **Disconnect existing webhook** action explicitly handles the reverse migration without exposing credentials. See the guide for its separate legacy credential names. Live delivery and owner interaction are unverified until credentials are entered and receipts are confirmed.
 
 ## Execution, owner control and recovery
 
 - **DAG scheduler:** validates cycles, unknown dependencies and duplicate IDs; independent tasks share a bounded pool. Failed dependencies block descendants. Pause gates new work; stop cancels queued work and requests. Review follows settled workers.
-- **Real Team Chat:** actual events carry task IDs, model-call IDs and artifact paths. Optional personality is labeled and off by default. “Where’s Zero?” appears after 15 minutes without input while Team Chat is open, with both toggles enabled. It never starts work.
-- **Owner gate:** immutable proposals expire after 15 minutes and are consumed once. A newer proposal supersedes older revisions for that run. The backend checks approved roots, paths, sizes and exact reviewed file baselines before writing. Stale files require review again. The old arbitrary `fs_apply(root, files)` IPC path was removed.
+- **Real Team Chat:** actual events carry task IDs, model-call IDs and artifact paths. Optional personality is labeled and off by default. “Where’s Zero?” reminders now require a legitimate pending approval, a configurable delay, and a bounded reminder count. They never start work.
+- **Owner gate:** immutable proposals bind project, task, run, action and exact staged contents; expire after 15 minutes; and are consumed once. High-risk remote approval records intent and requires native confirmation of that same revision. A newer proposal supersedes older revisions for the same project and run. The backend checks approved roots, paths, sizes and exact reviewed file baselines before writing. Stale files require review again. The old arbitrary `fs_apply(root, files)` IPC path was removed.
 - **Flight recorder:** 20 sessions, up to 80 frames each, locally stored with secrets masked. Only the latest frame retains full proposed contents. Recovery restores evidence, not tools or approvals; vendor model sessions are not resumed. Save finished runs controls recording; Clear recordings deletes recovery/replay data.
-- **Audit:** owner decisions append to `owner-approvals.jsonl` in app data and appear in the active Team Chat/recorder. No code or secrets enter the owner audit.
+- **Audit:** owner decisions append to `owner-approvals.jsonl` in app data and appear in the active Team Chat/recorder. Durable authorization is recorded before writes; audit failure blocks a new write. No code or secrets enter the owner audit.
 - **Verification:** reviewers receive complete worker output up to a combined 24,000-character limit. Larger proposals must be split and reviewed again; incomplete review cannot unlock approval. AI review is an opinion, not test execution. The existing Verify panel runs actual allowed project scripts per click. Writes are per-file; an I/O failure can leave a partial batch. Approval is consumed, never automatically replayed; inspect and stage a fresh revision.
 
 This protects against model-generated writes and remote Telegram impersonation. It is not an OS isolation boundary against someone controlling Zero’s Windows account, native dialogs or local app data.
@@ -98,14 +100,15 @@ cargo test --manifest-path src-tauri/Cargo.toml subscription_cli_smoke -- --igno
 
 The normal suite includes the original 173 tests plus concurrency/dependency/cancellation, complete review, migration and recorder/recovery coverage. Rust tests cover approval immutability, expiry, superseded revisions, single use, changed baselines, CLI safety/output parsing and Telegram webhook authentication/validation. Real inference is opt-in. `scripts/ui-smoke.cjs` checks the dashboard, recorded demo, native-only apply, replay scrubbing and integration setup with Playwright/Edge (`SWARM_PLAYWRIGHT_PATH` can point at an installed package).
 
-Upgrade validation: **184 TypeScript tests passed**, **19 Rust tests passed** (one subscription probe deliberately opt-in), the real two-agent Ollama integration demo passed, the Codex subscription readiness probe passed, and the browser smoke test and standalone desktop build succeeded. Native owner confirmations and live Telegram delivery await Zero's interaction and credentials; they were not auto-confirmed or represented as tested live.
+Telegram upgrade validation: **192 TypeScript tests passed**, **40 Rust tests passed** (one subscription probe deliberately opt-in), both browser smoke scripts passed, and the updated standalone desktop build succeeded. Native desktop startup and the Telegram configuration screen were inspected. The earlier real two-agent Ollama demo and Codex readiness probe remain documented above. Live Telegram identity, delivery/receipt and the harmless owner approval await Zero's secure credential entry and pairing; they were not auto-confirmed or represented as tested live.
 
 | Area | Implementation |
 | --- | --- |
 | Existing live pipeline and scheduler | `src/engine/liveDriver.ts`, `scheduler.ts` |
 | Roles and subscription adapters | `src/data/team.ts`, `src/providers/cli.ts`, `src-tauri/src/cli.rs` |
 | Native approvals and file confinement | `src-tauri/src/approvals.rs`, `fs.rs` |
-| Telegram and voice | `src-tauri/src/telegram.rs`, `src/components/swarm/TelegramPanel.tsx` |
+| Multi-bot Telegram and real-event bridge | `src-tauri/src/telegram_bots.rs`, `src/pages/TelegramBotsPage.tsx`, `src/lib/telegramBridge.ts` |
+| Preserved webhook and voice | `src-tauri/src/telegram.rs`, `src/components/swarm/TelegramPanel.tsx` |
 | Dashboard and replay | `src/components/swarm/MissionHeader.tsx`, `TeamChat.tsx`, `FlightRecorder.tsx` |
 | Persistence and migration | `src/persistence/flightRecorder.ts`, `src/store/app.ts`, `swarm.ts` |
 

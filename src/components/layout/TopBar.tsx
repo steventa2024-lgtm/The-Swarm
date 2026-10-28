@@ -19,6 +19,7 @@ const TITLES: Record<PageId, string> = {
   knowledge: 'Knowledge',
   templates: 'Templates',
   integrations: 'Integrations',
+  telegram: 'Telegram Bots',
   settings: 'Settings',
   support: 'Support',
 }

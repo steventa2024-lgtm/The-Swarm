@@ -54,7 +54,7 @@ export function SettingsPage() {
           <Row label="Paid API adapters" hint="Off on every launch. Subscription CLIs and local models remain available. Enabling requires native owner confirmation."><Switch checked={!!prefs.paidApisEnabled} onCheckedChange={async (enabled) => { try { const { invoke } = await import('@tauri-apps/api/core'); await invoke('set_api_policy', { enabled }); set({ paidApisEnabled: enabled }); setPolicyError('') } catch (e) { setPolicyError(String(e)) } }} /></Row>
           {policyError && <p role="alert" className="text-xs text-bad">{policyError}</p>}
           <Row label="Personalities" hint="Optional speaking style, visibly labeled in the UI."><Switch checked={!!prefs.personalities} onCheckedChange={p('personalities')} /></Row>
-          <Row label="Inactivity check-ins" hint="Personality only: “Where’s Zero?” after 15 minutes without input in Team Chat. Never starts work."><Switch disabled={!prefs.personalities} checked={!!prefs.inactivityCheckIns} onCheckedChange={p('inactivityCheckIns')} /></Row>
+          <Row label="Approval check-ins" hint="“Where’s Zero?” reminders are optional, labeled personality, and only run while a real approval is pending."><Button variant="outline" size="sm" onClick={() => useApp.getState().setPage('telegram')}>Configure Telegram reminders</Button></Row>
           <Row label="Clear flight recorder" hint="Removes saved replay frames and recovery checkpoints."><Button variant="danger" size="sm" onClick={() => { if (window.confirm('Delete all flight recordings?')) void clearFlights() }}>Clear recordings</Button></Row>
         </Section>
 

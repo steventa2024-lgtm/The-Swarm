@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import {
-  BookMarked, FolderKanban, LayoutTemplate, LifeBuoy, Plug, Settings, Sparkles, Users, Workflow,
+  BookMarked, FolderKanban, LayoutTemplate, LifeBuoy, Plug, Send, Settings, Sparkles, Users, Workflow,
   type LucideIcon,
 } from 'lucide-react'
 import { budgetLevel, paidTokens, usedLast24h } from '@/lib/budget'
@@ -18,6 +18,7 @@ const NAV: { id: PageId; label: string; icon: LucideIcon }[] = [
   { id: 'knowledge', label: 'Knowledge', icon: BookMarked },
   { id: 'templates', label: 'Templates', icon: LayoutTemplate },
   { id: 'integrations', label: 'Integrations', icon: Plug },
+  { id: 'telegram', label: 'Telegram Bots', icon: Send },
 ]
 const NAV_BOTTOM: { id: PageId; label: string; icon: LucideIcon }[] = [
   { id: 'settings', label: 'Settings', icon: Settings },

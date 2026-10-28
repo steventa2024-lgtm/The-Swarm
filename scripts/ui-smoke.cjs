@@ -34,7 +34,7 @@ const fs = require('node:fs/promises');
   await page.getByText('Frame 1 / 3 · planning',{exact:true}).waitFor();
   if (await page.getByRole('button',{name:'Pause',exact:true}).count()) throw new Error('Replay must not expose live run controls');
   await page.getByRole('button',{name:'Integrations',exact:true}).click();
-  await page.getByText('Telegram · optional owner channel', {exact:true}).waitFor();
+  await page.getByRole('button', {name:'Configure Telegram Bots', exact:true}).waitFor();
   await page.screenshot({path:'artifacts/integrations.png',fullPage:true});
   if (errors.length) throw new Error(errors.join('\n'));
   await browser.close(); console.log('UI smoke passed: idle dashboard, real recorded demo, native-only apply, replay scrubbing, integration setup; no browser errors.');

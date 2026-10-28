@@ -209,7 +209,7 @@ pub fn fs_read_text(root: String, path: String, max_bytes: usize, state: State<'
     }
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct WriteFile {
     pub path: String,
     pub content: String,
