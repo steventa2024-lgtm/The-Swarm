@@ -70,7 +70,7 @@ pub(crate) fn approved_root(state: &ApprovedRoots, root: &str) -> Result<PathBuf
 }
 
 /// Validates a project-relative path and joins it to the root (no filesystem access yet).
-fn join_rel(root: &Path, rel: &str) -> Result<PathBuf, String> {
+pub(crate) fn join_rel(root: &Path, rel: &str) -> Result<PathBuf, String> {
     let rel = rel.trim();
     if rel.is_empty() || rel.len() > 240 || rel.contains('\0') {
         return Err("Invalid path".into());
@@ -102,7 +102,7 @@ fn join_rel(root: &Path, rel: &str) -> Result<PathBuf, String> {
 }
 
 /// Deepest existing ancestor must resolve (through symlinks) to somewhere inside root.
-fn ensure_inside(root: &Path, target: &Path) -> Result<(), String> {
+pub(crate) fn ensure_inside(root: &Path, target: &Path) -> Result<(), String> {
     let mut cur = target.to_path_buf();
     while !cur.exists() {
         if !cur.pop() {
@@ -209,26 +209,29 @@ pub fn fs_read_text(root: String, path: String, max_bytes: usize, state: State<'
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct WriteFile {
-    path: String,
-    content: String,
+    pub path: String,
+    pub content: String,
+    pub expected: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct WriteOutcome {
-    path: String,
-    ok: bool,
-    created: bool,
-    error: Option<String>,
+    pub path: String,
+    pub ok: bool,
+    pub created: bool,
+    pub error: Option<String>,
 }
 
-#[tauri::command]
-pub fn fs_apply(root: String, files: Vec<WriteFile>, state: State<'_, ApprovedRoots>) -> Result<Vec<WriteOutcome>, String> {
+// Deliberately not an IPC command. Only the owner-approval module can call this.
+pub(crate) fn write_approved(root: String, files: Vec<WriteFile>, state: &ApprovedRoots) -> Result<Vec<WriteOutcome>, String> {
     let root = approved_root(&state, &root)?;
     if files.len() > MAX_FILES_PER_APPLY {
         return Err(format!("Too many files in one apply (max {MAX_FILES_PER_APPLY})"));
     }
+    // Validate the entire batch and its reviewed baselines before writing any file.
+    for f in &files { validate_proposal(&root, f)?; }
     let mut out = Vec::with_capacity(files.len());
     for f in files {
         let res = (|| -> Result<bool, String> {
@@ -259,6 +262,23 @@ pub fn fs_apply(root: String, files: Vec<WriteFile>, state: State<'_, ApprovedRo
         });
     }
     Ok(out)
+}
+
+pub(crate) fn validate_proposal(root: &Path, file: &WriteFile) -> Result<(), String> {
+    if file.content.len() > MAX_FILE_BYTES { return Err("File exceeds 1 MB".into()) }
+    let target = join_rel(root, &file.path)?;
+    ensure_inside(root, &target)?;
+    match fs::symlink_metadata(&target) {
+        Ok(meta) => {
+            if !meta.is_file() || meta.file_type().is_symlink() { return Err("Refusing a symlink or non-file".into()) }
+            if meta.len() > MAX_FILE_BYTES as u64 { return Err("Existing file exceeds review limit".into()) }
+            let current = fs::read_to_string(&target).map_err(|e| e.to_string())?;
+            if file.expected.as_deref() != Some(&current) { return Err(format!("{} changed since review. Review it again.", file.path)) }
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound && file.expected.is_none() => {},
+        Err(e) => return Err(format!("File baseline changed or cannot be read: {e}")),
+    }
+    Ok(())
 }
 
 #[cfg(test)]

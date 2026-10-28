@@ -1,151 +1,112 @@
-# ZeroPulse Swarm
+# The Swarm — Zero’s engineering workspace
 
-A desktop app that splits one big task across several AI agents running **different models**, so no single model — or paid API plan — has to carry the whole job.
+An upgrade of the existing **Tauri 2 / Rust / React / Zustand / SQLite** application. The planner → workers → reviewer pipeline, live graph, previews, projects, memory, history, conflict resolution, review-before-apply and verification tools remain in place.
 
-You drop in a master prompt. A **planner** reads it once and gives every agent a short brief for its own slice. **Workers** build their parts in parallel, a **reviewer** checks the result, and you watch it happen on a live graph, then **preview** what was built and **apply** it to your project.
+This is a source copy of `C:\Users\steve\OneDrive\Desktop\The Swarm by ZeroPulse`. The original source and installed app were not changed. The original documentation is retained in [docs/LEGACY-README.md](docs/LEGACY-README.md).
 
-> **Status: early / experimental.** The UI, the live engine (verified with local Ollama models), key storage, preview and file-apply all work. The OpenAI and Anthropic adapters are written but **not yet tested with real keys**. See [What is and isn't verified](#what-is-and-isnt-verified) and the [test guide](docs/TESTING.md).
+## Run
 
-Stack: Tauri 2 · Rust · React 19 · TypeScript · Tailwind CSS 4 · Framer Motion · Zustand · SQLite.
+Windows prerequisites: Node 20.19+ or 22.12+, Rust, MSVC build tools and WebView2.
 
----
+This workspace also includes a compiled standalone development executable at `artifacts/The Swarm.exe`. It embeds the dashboard and runs without a Vite server. It is a development build, not a signed installer.
 
-## Why it exists
+```powershell
+npm ci
+npm run tauri dev                 # Full desktop app
+npm run dev                       # Browser UI only; cannot apply files or run CLIs
+npm run tauri build -- --no-bundle # Standalone release executable
+```
 
-Big prompts burn tokens. Sending the whole thing to one expensive model is slow and costly; sending it to many agents naively multiplies the cost. ZeroPulse is built around three ideas:
+The app starts idle. Explicit simulation remains in Settings and is labeled; it does not populate live Team Chat. Existing projects, notes, provider configuration and custom assignments are retained. Original default agent assignments migrate to the new team. Upgraded settings use a separate `zeropulse-swarm/v2` key after reading the original `v1` data, so new provider types do not overwrite settings used by the older app. Paid APIs are off on every launch and require native owner confirmation to enable for that session.
 
-1. **Read once, brief everyone.** Only the planner reads the full master prompt. Each worker receives a self-contained brief with the requirements that concern it, plus a shared contract (file names, interfaces) so parallel work fits together. Roles with nothing to do are skipped and cost nothing.
-2. **Different models for different strengths.** *Agents → Auto-assign* profiles every available model (reasoning, coding, writing, speed, price) and gives each role the best fit, spreading the team across distinct models.
-3. **Spend paid tokens only where they're few.** On the default *Token saver* policy, paid models are reserved for planning and review (small outputs). Free local models (Ollama, llama.cpp) or cheap hosted models do the high-volume writing.
+## Short demo walkthrough
 
-## What you get
+1. Open **Open recorded Ollama demo** in the desktop app. This is real output captured by the opt-in integration test, not a simulation. A planner decomposed the task, separate backend and frontend agents produced files, and a reviewer checked them.
+2. Inspect **Team Chat**, **Graph**, workers and **Preview**. The proposal contains `index.html` and `styles.css` for a small Swarm page. No demo files have been applied to a project.
+3. Click **Review proposal**, choose an **empty demo folder** through the native picker and inspect both diffs.
+4. Click **Zero: approve & apply**. Only Zero should answer the native confirmation. Cancel rejects the revision. Agents cannot pass an approval flag or impersonate Zero through IPC.
+5. Use the existing **Verify** panel after applying. Open the static demo’s `index.html`; real projects retain detected test/build/lint checks and the fix-prompt flow.
+6. For a fresh run, connect Ollama under **Integrations**, then choose **Run local demo**. This explicitly selects local agents. Ordinary tasks use assigned providers and never silently fall back from a missing CLI.
+7. **Recorder** inspects recorded state without running tools. Interrupted sessions restore as stopped. **Prepare recovery task** prepares a new plan/review cycle; it never restores approval authority.
 
-| Screen | What it does |
+The final demo apply is deliberately waiting for **your approval**. This upgrade does not auto-click owner dialogs.
+
+## Team and subscription setup
+
+| Member | Responsibility | Connection |
+| --- | --- | --- |
+| Zero | Founder and final authority | Native confirmation or authenticated private Telegram callback |
+| ChatGPT through Codex | Chief engineer / planner | `codex login` → Sign in with ChatGPT; `codex exec` |
+| Claude Code | Principal engineer / reviewer | Eligible Claude subscription; tools-disabled print mode |
+| Gemini | Front end and UI lead | Gemini CLI Google OAuth, plan mode plus deny-all tool policy |
+| Cursor | QA and integration | Cursor **Agent CLI**, `agent login`, ask mode; editor command alone is insufficient |
+| Grok | Research | Manual only; no verified subscription automation adapter and no xAI API fallback |
+| Ollama | Offline support | Local Ollama server; cloud models excluded from Local Only |
+
+Use **Test signed-in CLI** to verify a real response. Finding an executable is not a verified connection. CLIs must support the safety flags in `src-tauri/src/cli.rs`; unsupported versions fail closed. Prompts use stdin, not an interpolated shell command. CLIs run in fresh temporary folders with API-key environment variables removed and return proposed text. Codex forces ChatGPT auth with a read-only sandbox; Claude requires `claude.ai` subscription auth with tools/customizations disabled; Gemini uses Google OAuth and denies tools; Cursor uses ask mode plus explicit [deny permissions](https://cursor.com/docs/cli/reference/permissions) for shell, files, web fetch and MCP tools.
+
+Provider quotas and any provider-configured overage billing still apply. Tokens reported by providers are recorded; estimates are labeled. Subscription cost/remaining quota is unavailable when not reported. API budgets exclude local and subscription traffic.
+
+Verified on this host during the upgrade:
+
+- **Ollama:** real planner → two workers → reviewer passed with `qwen2.5-coder:7b`; recording in `public/demo-run.json`.
+- **Codex:** a real readiness response succeeded with ChatGPT authentication.
+- **Claude:** authenticated with Pro, but inference hit the weekly usage limit. The CLI reported reset **October 29, 2026 at 3 p.m. America/Los_Angeles**. No paid API fallback was attempted.
+- **Gemini CLI / Cursor Agent CLI:** not installed here; adapters implemented but real inference unverified. The Cursor desktop editor is installed.
+- **Grok:** manual only. **Telegram:** no credentials supplied; not connected.
+
+Official references: [Codex auth](https://developers.openai.com/codex/auth), [Codex noninteractive](https://developers.openai.com/codex/noninteractive), [Claude CLI](https://code.claude.com/docs/en/cli-reference), [Gemini auth](https://geminicli.com/docs/get-started/authentication/), [Gemini policies](https://geminicli.com/docs/reference/policy-engine/), [Cursor headless](https://cursor.com/docs/cli/headless).
+
+## Optional Telegram setup
+
+1. Create a bot with **@BotFather**, then start its private chat. Obtain your numeric user ID and private chat ID through a trusted Telegram client/bot workflow. Group chats are rejected.
+2. In **Integrations → Telegram**, save `TELEGRAM_BOT_TOKEN` and a separate random `TELEGRAM_WEBHOOK_TOKEN` (32–256 letters, digits, `_` or `-`). Secrets use Windows Credential Manager with environment fallback; entry fields clear after saving and secrets are never persisted in frontend settings. Do not paste them into tasks or source files.
+3. Expose only `http://127.0.0.1:9462/telegram/webhook` through an HTTPS reverse proxy/tunnel. Preserve `X-Telegram-Bot-Api-Secret-Token` and configure a short body-read timeout at the proxy. Do not expose Vite, IPC or other local services.
+4. Enter Zero’s IDs and `https://your-host/telegram/webhook`, then **Register webhook**. Zero confirms the binding natively. “Webhook registered” means Telegram accepted registration; send `/status` in the private chat to verify actual delivery. Registration failures remain visible.
+5. Review a completed proposal in the app, then **Ask via Telegram**. The bot sends a file count and opaque revision ID with **Approve & apply** / **Reject** buttons. Automatic messages contain no prompts, code, filenames, credentials or model-written summaries.
+6. Send a voice note to the bot; **Refresh status & inbox** and play it locally. For outbound voice, select and preview an OGG/MP3/M4A under 5 MB and confirm natively. Voice never authorizes changes and is not automatically transcribed or sent to AI services.
+7. Disconnect revokes local authority and removes the remote webhook. Local authority is revoked even if remote removal fails. Reconnect after restarting the app; old approval buttons are revoked.
+
+Webhook validation checks the shared secret, exact numeric sender, private chat, body size, callback shape and single-use revision. Duplicate updates are acknowledged without repeating actions; a repeated approval cannot apply twice. `/status`, `/start`, `/help`, voice and revision buttons are supported. Arbitrary text never executes commands or grants approval. [Telegram Bot API documentation](https://core.telegram.org/bots/api).
+
+## Execution, owner control and recovery
+
+- **DAG scheduler:** validates cycles, unknown dependencies and duplicate IDs; independent tasks share a bounded pool. Failed dependencies block descendants. Pause gates new work; stop cancels queued work and requests. Review follows settled workers.
+- **Real Team Chat:** actual events carry task IDs, model-call IDs and artifact paths. Optional personality is labeled and off by default. “Where’s Zero?” appears after 15 minutes without input while Team Chat is open, with both toggles enabled. It never starts work.
+- **Owner gate:** immutable proposals expire after 15 minutes and are consumed once. A newer proposal supersedes older revisions for that run. The backend checks approved roots, paths, sizes and exact reviewed file baselines before writing. Stale files require review again. The old arbitrary `fs_apply(root, files)` IPC path was removed.
+- **Flight recorder:** 20 sessions, up to 80 frames each, locally stored with secrets masked. Only the latest frame retains full proposed contents. Recovery restores evidence, not tools or approvals; vendor model sessions are not resumed. Save finished runs controls recording; Clear recordings deletes recovery/replay data.
+- **Audit:** owner decisions append to `owner-approvals.jsonl` in app data and appear in the active Team Chat/recorder. No code or secrets enter the owner audit.
+- **Verification:** reviewers receive complete worker output up to a combined 24,000-character limit. Larger proposals must be split and reviewed again; incomplete review cannot unlock approval. AI review is an opinion, not test execution. The existing Verify panel runs actual allowed project scripts per click. Writes are per-file; an I/O failure can leave a partial batch. Approval is consumed, never automatically replayed; inspect and stage a fresh revision.
+
+This protects against model-generated writes and remote Telegram impersonation. It is not an OS isolation boundary against someone controlling Zero’s Windows account, native dialogs or local app data.
+
+## Tests
+
+```powershell
+npm test
+npm run build
+cargo test --manifest-path src-tauri/Cargo.toml
+
+# Explicit real local inference; saves a proposal only:
+$env:SWARM_LIVE_DEMO = '1'
+npx vitest run src/__tests__/liveDemo.test.ts
+Remove-Item Env:SWARM_LIVE_DEMO
+
+# Explicit real Codex subscription readiness check:
+cargo test --manifest-path src-tauri/Cargo.toml subscription_cli_smoke -- --ignored
+```
+
+The normal suite includes the original 173 tests plus concurrency/dependency/cancellation, complete review, migration and recorder/recovery coverage. Rust tests cover approval immutability, expiry, superseded revisions, single use, changed baselines, CLI safety/output parsing and Telegram webhook authentication/validation. Real inference is opt-in. `scripts/ui-smoke.cjs` checks the dashboard, recorded demo, native-only apply, replay scrubbing and integration setup with Playwright/Edge (`SWARM_PLAYWRIGHT_PATH` can point at an installed package).
+
+Upgrade validation: **184 TypeScript tests passed**, **19 Rust tests passed** (one subscription probe deliberately opt-in), the real two-agent Ollama integration demo passed, the Codex subscription readiness probe passed, and the browser smoke test and standalone desktop build succeeded. Native owner confirmations and live Telegram delivery await Zero's interaction and credentials; they were not auto-confirmed or represented as tested live.
+
+| Area | Implementation |
 | --- | --- |
-| **Swarm** | Task box (agent count, run mode), live orchestration graph, worker cards, activity feed, file changes, token / cost / provider metrics. Views: **Graph**, **Timeline**, **Preview**. |
-| **Preview** | Renders what the agents built, updating as each finishes. Static HTML/CSS/JS and React/TSX. Desktop / tablet / phone widths, error banner, and a Code tab. |
-| **Review & apply** | Compare every proposed file against your real files as a diff, resolve files several agents wrote, then write the ones you pick into your project folder. |
-| **History** | Every finished live run is saved (its files, activity and result). Reopen one from the **History** menu to see its graph, preview it, re-apply it or verify it again. The newest 25 are kept; secrets are masked before saving. |
-| **Verify & fix** | After applying, run the project's own tests / build / lint (or a JS syntax check) and see the real output. If one fails, **Ask the team to fix it** prepares a fix prompt from the failure. |
-| **Agents** | Auto-assign models by strength, per-agent model, editable **skill** (standing instructions), capabilities, enable/disable. |
-| **Integrations** | Test & connect providers (Ollama, llama.cpp, OpenAI-compatible, OpenRouter, Anthropic); store API keys securely. |
-| **Projects / Knowledge / Templates / Settings / Support** | Working folders per project, project memory notes, reusable task presets, budgets and preferences, diagnostics. |
+| Existing live pipeline and scheduler | `src/engine/liveDriver.ts`, `scheduler.ts` |
+| Roles and subscription adapters | `src/data/team.ts`, `src/providers/cli.ts`, `src-tauri/src/cli.rs` |
+| Native approvals and file confinement | `src-tauri/src/approvals.rs`, `fs.rs` |
+| Telegram and voice | `src-tauri/src/telegram.rs`, `src/components/swarm/TelegramPanel.tsx` |
+| Dashboard and replay | `src/components/swarm/MissionHeader.tsx`, `TeamChat.tsx`, `FlightRecorder.tsx` |
+| Persistence and migration | `src/persistence/flightRecorder.ts`, `src/store/app.ts`, `swarm.ts` |
 
-## Run it
-
-The desktop app is the real thing. API keys, project-folder access and previews **only work in the desktop app**, not in the browser dev server.
-
-**Prerequisites (Windows):** Node 20+, [Rust](https://rustup.rs), MSVC build tools, WebView2 (included in Windows 11). For live runs with local models, install [Ollama](https://ollama.com) and pull a model.
-
-```bash
-npm install
-npm run tauri build -- --no-bundle   # fast: just the exe -> src-tauri/target/release/zeropulse-swarm.exe
-npm run tauri build                  # also builds the .msi and NSIS installers under bundle/
-npm run tauri dev                    # development, with hot reload
-npm run dev                          # UI only, in a browser (no keys, folders or React previews)
-npm test                             # unit tests
-```
-
-## How a run works
-
-```
-Master prompt
-   │
-   ▼
-Planner (strong model, reads everything once)
-   │   writes: shared contract + per-agent brief, acceptance criteria, owned files
-   │   may skip roles that have nothing to do
-   ▼
-Workers run in parallel  ── each gets: its skill + contract + its brief (not the full prompt)
- Frontend · Backend · QA · Docs · Researcher    (different models, each owns its files)
-   │
-   ▼
-Reviewer (compact digest, checks every agent's acceptance criteria)
-   │
-   ▼
-Final output  →  Preview tab  →  Review & apply to your project folder
-   │
-   ▼
-Verify (run your tests/build)  →  failed?  →  "Ask the team to fix it"  →  back to the Planner
-```
-
-Worker output is **proposed file contents**. Nothing touches your disk until you review and apply it.
-
-## Architecture
-
-```
-src/
-  types/             Domain types: Task, Run, Worker, Provider, AgentDefinition, FileChange, Metrics…
-  data/
-    seed.ts          Default providers, agents, projects, templates, memory
-    skills.ts        Default skill (standing instructions) for each agent role
-  engine/
-    driver.ts        OrchestratorDriver interface — the seam between UI and orchestration
-    liveDriver.ts    Real driver: plan → parallel workers → review, over provider adapters
-    simulator.ts     Scripted demo driver (the default on first launch)
-    strengths.ts     Model profiling + auto-assign (token-saver / balanced / quality)
-    routing.ts       Per-run-mode model routing
-    notes.ts         Sends only the project notes that relate to the prompt
-    blueprints.ts    Placeholder plans used by the simulator
-  providers/         OpenAI-compatible + Anthropic adapters, SSE parser, transport, connection test
-  preview/build.ts   Turns proposed files into a runnable preview (HTML, or TSX via sucrase + import map)
-  lib/               diff, budget, redaction, checks runner + secrets + file-access bridges, helpers
-  store/             Zustand: persisted workspace data, live run state
-  persistence/       SQLite (desktop) or localStorage (browser); runStore.ts saves finished runs
-  components/ pages/ UI (shadcn-style primitives, graph, rails, dialogs, 8 pages)
-  __tests__/         Vitest suites
-src-tauri/
-  src/provider.rs    HTTP bridge to model providers (attaches keys, streams responses)
-  src/secrets.rs     API keys in Windows Credential Manager (write / check / delete, never read back)
-  src/fs.rs          Project file access confined to folders the user approved
-  src/preview.rs     Loopback preview server, sandbox-friendly CSP
-  src/checks.rs      Runs a project's tests/build/lint from a fixed menu, with timeout + cancel
-  migrations/        SQLite schema
-docs/TESTING.md     What to test, in what order, and what "good" looks like
-.github/workflows/  CI: typecheck, unit tests, web build (Linux) and Rust tests (Windows)
-```
-
-## Cost controls
-
-- **Token budget (Settings).** A daily limit on *paid* tokens over a rolling 24 hours. Local models are free and never counted, and neither are simulated runs or the sample history.
-  - **Strict:** a paid run won't start once the limit is used up, and a live run that reaches it is stopped. An all-local run is never blocked.
-  - **Balanced** (default): warns at 80% and 100% but never interrupts a run.
-  - **Off:** no limit.
-- **Rate limits and overload.** Hosted APIs return HTTP 429 / 5xx when several agents call them at once. A worker retries up to 3 times with backoff (honouring a "try again in…" hint), shown in the activity feed, and only if nothing had streamed yet. Auth errors such as a bad key are not retried. Stop cancels a wait immediately.
-- **Skipped roles and slim briefs** (see above) are the main saving; the budget is the safety net.
-
-## Security model
-
-- **API keys** live in Windows Credential Manager. The UI can save, check and delete a key but can never read one back; only the Rust bridge reads it, to attach a header. Key names must end in `KEY` or `TOKEN`.
-- **File access** is limited to project folders you pick in the native dialog. Approval is enforced in Rust and persisted; paths with `..`, absolute paths, symlink escapes and `.git` are rejected.
-- **Previews** run in a sandboxed iframe served from a loopback port on its own origin, with a CSP that blocks the page from making its own network requests. Generated code cannot reach the app, its storage or its IPC.
-- **Live runs send your prompt (and any related project notes) to the providers you verified.** Use *Local Only* mode, or only connect local providers, to keep everything on your machine.
-- **Saved runs** are stored locally (SQLite), never sent anywhere. With *Redact secrets* on (the default), API keys, tokens and private keys are masked in prompts, logs and files before a run is saved. Ordinary code is left as written, so a saved run can still be re-applied. You can turn saving off or delete everything in Settings → Data & privacy.
-- **Running checks** executes your project's own scripts, so it is a deliberate, per-click action. The UI shows the exact script text first. The webview can only choose from a fixed menu (`npm run test|typecheck|lint|build|check`, `cargo check|test`, `pytest`, a JS syntax check) in an approved folder — it can never send a command line. Every run has a 3-minute timeout and a Stop button that kills the whole process tree.
-- Ollama "cloud" models are hidden from local providers because they leave the machine.
-
-## What is and isn't verified
-
-**Verified in the real desktop app:** live runs against Ollama (plan, parallel build, review), Pause / Resume / Stop, auto-assign, token-saving skip of idle roles, key storage and bridge, preview of static pages and React pages, the confined file read/apply flow, conflict handling, the release build and Desktop launch. 149 unit tests and 7 Rust tests pass.
-
-**Not verified yet:**
-- **OpenAI, OpenRouter and Anthropic adapters** with real keys. Request shape, auth headers, streaming, usage and error handling are covered by unit tests against the documented protocols, but no real request has been made.
-- The native **folder-picker dialog** (its approval logic is tested; the dialog itself is not automated).
-- The **MSI / NSIS installers** (built, never installed).
-- A second live run after the latest "don't write other agents' files" prompt change.
-
-**Known limitations:**
-- Windows only for stored keys right now (the credential-store feature is enabled for Windows only).
-- Local models are slow to load and their output quality varies; the reviewer is still an LLM opinion — use **Verify** for real results. Dependencies are never installed for you (run `npm install` yourself first).
-- React previews load React from esm.sh, so they need internet.
-- Model strength profiles are heuristics from model names and prices, not benchmarks.
-- The fix loop is manual: a failing check prepares a fix prompt, but you press Run. Nothing re-runs the team automatically.
-
-## Contributing / extending
-
-- Add a provider: implement `ProviderAdapter` in `src/providers/` and register it in `adapterFor`.
-- Change how work is split: edit the planner prompt in `src/engine/liveDriver.ts` and the default skills in `src/data/skills.ts`.
-- Swap the orchestrator: implement `OrchestratorDriver` and select it in `src/store/swarm.ts`.
-- Theme: colour tokens are in `@theme` in `src/index.css`.
-
-> A `postcss.config.js` in a *parent* folder can break Vite builds; `vite.config.ts` pins an inline PostCSS config to avoid that.
+The [legacy README](docs/LEGACY-README.md) and [original testing guide](docs/TESTING.md) describe the pre-upgrade build; their historical verification claims do not apply to new integrations.

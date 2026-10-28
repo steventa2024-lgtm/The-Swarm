@@ -1,0 +1,41 @@
+const { chromium } = require(process.env.SWARM_PLAYWRIGHT_PATH || 'playwright');
+const fs = require('node:fs/promises');
+(async () => {
+  const browser = await chromium.launch({channel:'msedge',headless:true});
+  const page = await browser.newPage({viewport:{width:1480,height:980}});
+  const errors = [];
+  page.on('pageerror', (e)=>errors.push(e.message));
+  await page.goto('http://127.0.0.1:1421', {waitUntil:'networkidle'});
+  await page.getByRole('heading',{name:'Mission control.'}).waitFor();
+  await fs.mkdir('artifacts',{recursive:true});
+  await page.screenshot({path:'artifacts/dashboard-idle.png',fullPage:true});
+  await page.getByRole('button',{name:'Open recorded Ollama demo',exact:true}).click();
+  await page.getByRole('button',{name:'Review proposal ↗',exact:true}).waitFor();
+  await page.screenshot({path:'artifacts/dashboard-demo.png',fullPage:true});
+  await page.getByRole('button',{name:'Review proposal ↗',exact:true}).click();
+  await page.getByRole('dialog',{name:'Review and apply changes'}).waitFor();
+  if (await page.getByRole('button',{name:/Zero: approve & apply/}).isEnabled()) throw new Error('Browser must not apply native files');
+  await page.getByRole('button',{name:'Close',exact:true}).click();
+  // A replay of a running frame must not lock navigation or start a real run.
+  await page.evaluate(async () => {
+    const demo = await (await fetch('/demo-run.json')).json();
+    const frames = ['planning','running','completed'].map(status => ({...demo,status}));
+    localStorage.setItem('swarm-flight/index', JSON.stringify(['ui-replay-check']));
+    localStorage.setItem('swarm-flight/ui-replay-check', JSON.stringify({version:1,id:'ui-replay-check',frames,updatedAt:Date.now()}));
+  });
+  await page.getByRole('button',{name:'Recorder',exact:true}).click();
+  await page.locator('section[aria-label="Session flight recorder"] select').selectOption('ui-replay-check');
+  await page.getByRole('button',{name:'View frame',exact:true}).click();
+  await page.getByText('Recorded state · replay is read-only',{exact:true}).waitFor();
+  const slider = page.getByRole('slider',{name:'Replay position'});
+  await slider.press('End');
+  await page.getByText('Frame 3 / 3 · completed',{exact:true}).waitFor();
+  await slider.press('Home');
+  await page.getByText('Frame 1 / 3 · planning',{exact:true}).waitFor();
+  if (await page.getByRole('button',{name:'Pause',exact:true}).count()) throw new Error('Replay must not expose live run controls');
+  await page.getByRole('button',{name:'Integrations',exact:true}).click();
+  await page.getByText('Telegram · optional owner channel', {exact:true}).waitFor();
+  await page.screenshot({path:'artifacts/integrations.png',fullPage:true});
+  if (errors.length) throw new Error(errors.join('\n'));
+  await browser.close(); console.log('UI smoke passed: idle dashboard, real recorded demo, native-only apply, replay scrubbing, integration setup; no browser errors.');
+})().catch((e)=>{console.error(e);process.exit(1)});

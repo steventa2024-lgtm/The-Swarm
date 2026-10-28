@@ -15,10 +15,11 @@ export function RunHistoryMenu() {
   const [error, setError] = useState<string | null>(null)
   const box = useRef<HTMLDivElement>(null)
   const status = useSwarm((s) => s.run?.status)
+  const replaying = useSwarm((s) => s.replaying)
   const currentId = useSwarm((s) => s.run?.id)
   const projects = useApp((s) => s.projects)
   const storing = useApp((s) => s.preferences.storeRunLogs)
-  const busy = !!status && ['planning', 'running', 'reviewing', 'paused'].includes(status)
+  const busy = !replaying && !!status && ['planning', 'running', 'reviewing', 'paused'].includes(status)
 
   useEffect(() => {
     if (!open) return

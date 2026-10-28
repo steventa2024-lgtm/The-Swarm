@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { CheckCircle2, X } from 'lucide-react'
 import { useEffect } from 'react'
 import { Button } from '@/components/ui/button'
+import { buildReviewFixPrompt } from '@/lib/checks'
 import { useSwarm } from '@/store/swarm'
 import { formatCost, formatDuration, formatTokens } from '@/lib/utils'
 import type { Run } from '@/types'
@@ -15,6 +16,15 @@ export function FinalOutputModal({ run, open, onClose }: { run: Run | null; open
   }, [open, onClose])
 
   const out = run?.finalOutput
+  // Open reviewer issues / failed checks become a one-click follow-up run.
+  const fixPrompt = out && run
+    ? buildReviewFixPrompt({
+        issues: out.nextSteps.filter((s) => /^Resolve:/i.test(s)),
+        failedChecks: out.checks.filter((c) => !c.passed && !/^Reviewer:/.test(c.label)).map((c) => c.label),
+        originalTask: run.task.prompt,
+        files: [...new Set(run.fileChanges.map((f) => f.path))],
+      })
+    : null
   return (
     <AnimatePresence>
       {open && run && out && (
@@ -69,6 +79,13 @@ export function FinalOutputModal({ run, open, onClose }: { run: Run | null; open
               <Button variant="primary" className="mt-5 w-full" onClick={() => { onClose(); useSwarm.getState().setApplyOpen(true) }}>
                 Review & apply {new Set(run.fileChanges.filter((f) => f.content !== undefined).map((f) => f.path)).size} proposed files
               </Button>
+            )}
+
+            {fixPrompt && (
+              <div className="mt-3 rounded-xl border border-warn/30 bg-warn/[0.07] p-3">
+                <p className="text-[12px] text-ink-2">The reviewer left open issues. Apply the changes first so the team can read them, then send the issues back.</p>
+                <Button variant="outline" size="sm" className="mt-2" onClick={() => { onClose(); useSwarm.getState().prepareFix(fixPrompt) }}>Send the issues back to the team</Button>
+              </div>
             )}
 
             <div className="mt-5 border-t hairline pt-4">

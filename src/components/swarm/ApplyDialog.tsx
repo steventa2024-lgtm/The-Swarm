@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { AlertTriangle, CheckCircle2, FolderOpen, Loader2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { applyFiles, fsAvailable, pickFolder, readText, type ReadResult, type WriteOutcome } from '@/lib/fsBridge'
+import { applyFiles, stageFiles, fsAvailable, pickFolder, readText, type ReadResult, type WriteOutcome } from '@/lib/fsBridge'
 import { collapse, diffLines, type DiffResult } from '@/lib/diff'
 import { ROLE_META } from '@/lib/meta'
 import { cn } from '@/lib/utils'
@@ -40,6 +40,7 @@ export function ApplyDialog() {
   const open = useSwarm((s) => s.applyOpen)
   const setOpen = useSwarm((s) => s.setApplyOpen)
   const run = useSwarm((s) => s.run)
+  const replaying = useSwarm((s) => s.replaying)
   const project = useApp((s) => s.projects.find((p) => p.id === (run?.task.projectId ?? s.activeProjectId)))
   const updateProject = useApp((s) => s.updateProject)
   const root = project?.root
@@ -52,6 +53,7 @@ export function ApplyDialog() {
   const [applying, setApplying] = useState(false)
   const [results, setResults] = useState<WriteOutcome[] | null>(null)
   const [fatal, setFatal] = useState<string | null>(null)
+  const [pending, setPending] = useState<string | null>(null)
 
   const proposals = useMemo<Proposal[]>(() => {
     const byPath = new Map<string, FileChange[]>()
@@ -67,6 +69,7 @@ export function ApplyDialog() {
     if (!open) return
     setResults(null)
     setFatal(null)
+    setPending(null)
     setExisting({})
     setChoice({})
     setPicked(new Set())
@@ -130,13 +133,37 @@ export function ApplyDialog() {
   }
 
   const selected = rows.filter((r) => picked.has(r.path) && !r.error && !r.unresolved)
-  const apply = async () => {
-    if (!root) return
+  const canRequest = run?.source === 'live' && run.status === 'completed' && run.reviewVerdict === 'approved' && !replaying
+  const apply = async (telegram = false) => {
+    if (!root || !run || !canRequest) return
     setApplying(true)
-    try { setResults(await applyFiles(root, selected.map((r) => ({ path: r.path, content: r.change.content ?? '' })))) }
+    setFatal(null)
+    try {
+      const approval = await stageFiles(root, selected.map((r) => ({ path: r.path, content: r.change.content ?? '', expected: r.existing?.state === 'ok' && r.existing.read.exists ? r.existing.read.content : null })), run.id, run.reviewVerdict === 'approved')
+      if (telegram) {
+        const { invoke } = await import('@tauri-apps/api/core')
+        await invoke('telegram_request_approval', { approvalId: approval.id })
+        setPending(approval.id)
+      } else setResults(await applyFiles(approval.id))
+    }
     catch (e) { setFatal(e instanceof Error ? e.message : String(e)) }
     setApplying(false)
   }
+
+  useEffect(() => {
+    if (!pending || !fsAvailable()) return
+    let disposed = false; let unlisten: (() => void) | undefined
+    void import('@tauri-apps/api/event').then(async ({ listen }) => {
+      const stop = await listen<{ id: string; status: string; outcomes?: WriteOutcome[] }>('swarm-approval', ({ payload }) => {
+        if (payload.id === pending) {
+          setPending(null)
+          if (payload.outcomes?.length) { setResults(payload.outcomes); setFatal(null) }
+          else setFatal(`Zero's Telegram decision: ${payload.status}. Reopen review to compare the current files.`)
+        }
+      }); if (disposed) stop(); else unlisten = stop
+    })
+    return () => { disposed = true; unlisten?.() }
+  }, [pending])
 
   const current = rows.find((r) => r.path === active)
   const view = current?.diff ? collapse(current.diff.ops) : []
@@ -227,6 +254,7 @@ export function ApplyDialog() {
               </div>
             )}
 
+            {(!canRequest || pending) && <p className="border-t hairline px-5 py-2 text-xs text-warn">{pending ? `Awaiting Zero on Telegram · revision ${pending}` : 'Apply requires a completed live run, passed review, and Zero’s native approval. Replay and simulation are read-only.'}</p>}
             {(fatal || results) && (
               <div className="max-h-[48%] overflow-y-auto border-t hairline px-5 py-3 text-[12px]">
                 {fatal && <p className="text-bad">{fatal}</p>}
@@ -257,9 +285,10 @@ export function ApplyDialog() {
               <div className="flex gap-2">
                 <Button variant="ghost" onClick={() => setOpen(false)}>{results ? 'Done' : 'Cancel'}</Button>
                 {!results && (
-                  <Button variant="primary" disabled={!root || selected.length === 0 || applying || loading} onClick={apply}>
-                    {applying && <Loader2 className="h-4 w-4 animate-spin" />}Apply {selected.length} file{selected.length === 1 ? '' : 's'}
-                  </Button>
+                  <><Button variant="outline" disabled={!canRequest || !root || !selected.length || applying || loading || !!pending} onClick={() => void apply(true)}>Ask via Telegram</Button>
+                  <Button variant="primary" disabled={!canRequest || !root || selected.length === 0 || applying || loading || !!pending} onClick={() => void apply()}>
+                    {applying && <Loader2 className="h-4 w-4 animate-spin" />}Zero: approve & apply {selected.length}
+                  </Button></>
                 )}
               </div>
             </footer>

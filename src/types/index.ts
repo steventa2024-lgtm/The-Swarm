@@ -4,6 +4,7 @@
 // ───────────────────────── Providers & models ─────────────────────────
 
 export type ProviderKind =
+  | 'cli'
   | 'openai-compatible'
   | 'anthropic'
   | 'openrouter'
@@ -27,6 +28,7 @@ export interface ModelInfo {
 export type ConnectionStatus = 'connected' | 'disconnected' | 'unconfigured'
 
 export interface Provider {
+  subscription?: boolean
   id: string
   name: string
   kind: ProviderKind
@@ -85,6 +87,7 @@ export interface ChecklistItem {
 
 /** A live agent instance inside a run. */
 export interface Worker {
+  usageEstimated?: boolean
   id: string
   agentId: string
   role: AgentRole
@@ -151,6 +154,9 @@ export type RunStatus =
 export type ActivityKind = 'system' | 'plan' | 'code' | 'review' | 'test' | 'info' | 'success' | 'warning'
 
 export interface ActivityEvent {
+  taskId?: string
+  toolRunId?: string
+  artifactPath?: string
   id: string
   at: number // ms offset from run start
   kind: ActivityKind
@@ -210,6 +216,8 @@ export interface FinalOutput {
 }
 
 export interface Run {
+  source?: 'live' | 'simulation'
+  reviewVerdict?: 'approved' | 'changes_requested'
   id: string
   task: Task
   status: RunStatus
@@ -293,6 +301,10 @@ export interface Integration {
 }
 
 export interface Preferences {
+  teamVersion?: number
+  paidApisEnabled?: boolean
+  personalities?: boolean
+  inactivityCheckIns?: boolean
   tokenBudgetMode: 'strict' | 'balanced' | 'unlimited'
   tokenBudget: number
   maxConcurrency: number
@@ -316,5 +328,17 @@ export type PageId =
   | 'integrations'
   | 'settings'
   | 'support'
+
+/** A text file the user attached to a task as reference material. */
+export interface Attachment {
+  name: string
+  content: string
+  /** True if the file was cut to fit the size limit. */
+  truncated: boolean
+  /** Rough token cost (~4 characters per token). */
+  tokens: number
+  /** How many things that look like credentials the file contains (we warn, never alter). */
+  secrets: number
+}
 
 export type SwarmView = 'graph' | 'timeline' | 'preview'

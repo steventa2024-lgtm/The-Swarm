@@ -1,12 +1,14 @@
 import type { ModelInfo, Provider } from '@/types'
 import { anthropicAdapter } from './anthropic'
 import { openAiAdapter } from './openai'
+import { cliAdapter } from './cli'
 import type { ProviderAdapter } from './types'
 
 export * from './types'
 export { isAbort, inTauri } from './transport'
 
 export function adapterFor(p: Provider): ProviderAdapter {
+  if (p.kind === 'cli') return cliAdapter
   return p.kind === 'anthropic' ? anthropicAdapter : openAiAdapter
 }
 
@@ -36,7 +38,8 @@ function localModel(id: string): ModelInfo {
 export async function testConnection(p: Provider): Promise<ConnectionResult> {
   const started = performance.now()
   const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), 15_000)
+  const timeoutMs = p.kind === 'cli' ? 60_000 : 15_000
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
     const ids = await adapterFor(p).listModels(p, ctrl.signal)
     const latencyMs = Math.round(performance.now() - started)
@@ -53,7 +56,7 @@ export async function testConnection(p: Provider): Promise<ConnectionResult> {
     return { ok: true, latencyMs, modelIds: ids, missing, next: { verified: true, status: 'connected' } }
   } catch (e) {
     const aborted = ctrl.signal.aborted
-    const raw = aborted ? 'Timed out after 15 s' : e instanceof Error ? e.message : String(e)
+    const raw = aborted ? `Timed out after ${timeoutMs / 1000} s` : e instanceof Error ? e.message : String(e)
     return { ok: false, latencyMs: Math.round(performance.now() - started), modelIds: [], missing: [], error: raw }
   } finally {
     clearTimeout(timer)

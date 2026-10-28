@@ -66,7 +66,7 @@ export function createRun(req: RunRequest, ctx: DriverContext): { run: Run; scri
   const available = [...blueprint.priority, ...WORKER_ROLES].filter(
     (r, i, arr) => arr.indexOf(r) === i && enabled.some((a) => a.role === r),
   )
-  const roles = available.slice(0, clamp(Math.min(wanted, ctx.maxWorkers), 1, 4))
+  const roles = available.slice(0, clamp(wanted, 1, 4))
 
   const planner = makeWorker(pickDef(enabled, 'planner'), req.mode, ctx, 0, 'Analysing the task and building a plan', [
     'Classify complexity', 'Decompose subtasks', 'Assign workers', 'Route models',
@@ -102,6 +102,7 @@ export function createRun(req: RunRequest, ctx: DriverContext): { run: Run; scri
   }
 
   const run: Run = {
+    source: 'simulation',
     id: uid('run'), task, status: 'planning', subtasks: [], workers: [planner, ...workers, reviewer],
     events: [], fileChanges: [], timeline: [], metrics: emptyMetrics(), startedAt: Date.now(), elapsedMs: 0,
   }

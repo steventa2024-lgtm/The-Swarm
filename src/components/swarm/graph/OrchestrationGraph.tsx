@@ -47,12 +47,17 @@ export function OrchestrationGraph({ run, loading, onOpenFinal }: { run: Run | n
       { id: `${k}-reviewer`, from: k, to: 'reviewer' },
     ]),
     { id: 'reviewer-final', from: 'reviewer', to: 'final', fromAnchor: 'r' as const, toAnchor: 'l' as const },
+    ...(run?.subtasks ?? []).flatMap((task) => task.dependsOn.flatMap((dep) => {
+      const from = workers.find((w) => w.subtaskId === dep), to = workers.find((w) => w.subtaskId === task.id)
+      return from && to ? [{ id: `dep:${from.id}:${to.id}`, from: `w:${from.id}`, to: `w:${to.id}`, fromAnchor: 'r' as const, toAnchor: 'l' as const }] : []
+    })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [workerKeys.join('|')])
+  ], [workerKeys.join('|'), JSON.stringify(run?.subtasks.map((t) => t.dependsOn))])
 
-  const { edges, box } = useEdges(ref, edgeSpecs, workerKeys.join('|') + (loading ? ':l' : ''))
+  const { edges, box } = useEdges(ref, edgeSpecs, edgeSpecs.map((e) => e.id).join('|') + (loading ? ':l' : ''))
 
   const stateFor = (id: string): EdgeState => {
+    if (id.startsWith('dep:')) { const [,from,to] = id.split(':'); return edgeState(workers.find((w) => w.id === from) ?? null, workers.find((w) => w.id === to) ?? null, run) }
     if (id === 'task-planner') return edgeState('task', planner ?? null, run)
     if (id === 'reviewer-final') return edgeState(reviewer ?? null, 'final', run)
     const wk = workers.find((w) => id === `planner-w:${w.id}` || id === `w:${w.id}-reviewer`)

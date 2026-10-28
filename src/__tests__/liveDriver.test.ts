@@ -16,6 +16,7 @@ let plannerSkips: string[] = []
 let failures = 0
 /** When set, workers emit this exact text instead of the default single file. */
 let workerText: string | null = null
+let instantWorker = false
 let failMessage = 'HTTP 429: {"error":{"message":"Rate limit reached. Please try again in 20ms"}}'
 
 /** A fake provider: slow, streams text, and honours abort like the real transport. */
@@ -44,6 +45,7 @@ vi.mock('@/providers', () => ({
       } else {
         text = workerText ?? 'Summary of approach.\n\n### FILE: out.js\n```js\nconsole.log(1)\n```\n'
       }
+      if (role === 'worker' && instantWorker) { req.onDelta?.(text); return { text, usage: { inputTokens: 100, outputTokens: 50, estimated: false } } }
       const slow = role === 'worker' ? 25 : 5
       const pieces = text.match(/[\s\S]{1,20}/g) ?? []
       for (const piece of pieces) {
@@ -74,7 +76,7 @@ const start = () => liveDriver.start(req(), ctx(), (r) => { latest = r })
 const until = async (cond: () => boolean, ms = 6000) => { const t = Date.now(); while (Date.now() - t < ms) { if (cond()) return true; await sleep(20) } return false }
 const workersWorking = () => latest?.workers.slice(1, -1).filter((w) => w.status === 'working').length ?? 0
 
-beforeEach(() => { calls.length = 0; plannerSkips = []; failures = 0; workerText = null; failMessage = 'HTTP 429: {"error":{"message":"Rate limit reached. Please try again in 20ms"}}'; latest = null })
+beforeEach(() => { calls.length = 0; plannerSkips = []; failures = 0; workerText = null; instantWorker = false; failMessage = 'HTTP 429: {"error":{"message":"Rate limit reached. Please try again in 20ms"}}'; latest = null })
 afterEach(() => { vi.restoreAllMocks() })
 
 describe('live driver — token-saving behaviour', () => {
@@ -137,9 +139,9 @@ describe('live driver — Stop', () => {
     expect(JSON.stringify({ calls: calls.length, ev: latest!.events.length, tok: latest!.metrics.tokensIn + latest!.metrics.tokensOut })).toBe(snapshot)
   })
 
-  it('REGRESSION: a worker whose staggered start comes after Stop must not start', async () => {
-    const ctl = start()
-    // Wait for the first worker only; the others are still in their start-up stagger.
+  it('REGRESSION: a queued worker must not start after Stop', async () => {
+    const ctl = liveDriver.start(req(), { ...ctx(), maxWorkers: 1 }, (r) => { latest = r })
+    // The concurrency cap keeps the other two tasks queued.
     expect(await until(() => workersWorking() >= 1 && workersWorking() < 3)).toBe(true)
     ctl.stop()
     await until(() => latest?.status === 'stopped')
@@ -315,5 +317,46 @@ describe('live driver — a model that repeats itself', () => {
       expect(w.additions).toBe(2) // one line each, not four
     }
     expect(latest!.metrics.filesChanged).toBe(latest!.fileChanges.length)
+  })
+})
+
+describe('live driver — review completeness', () => {
+  it('sends file contents past the old excerpt boundary to the reviewer', async () => {
+    instantWorker = true
+    workerText = 'Summary.\n\n### FILE: app.js\n```js\n' + '// line\n'.repeat(150) + 'REVIEW-TAIL-SENTINEL\n```'
+    start()
+    expect(await until(() => latest?.status === 'completed')).toBe(true)
+    expect(calls.find((c) => c.role === 'reviewer')?.messages[1].content).toContain('REVIEW-TAIL-SENTINEL')
+    expect(latest?.reviewVerdict).toBe('approved')
+  })
+  it('blocks approval when a proposal cannot fit in the review context', async () => {
+    instantWorker = true
+    workerText = 'Summary.\n\n### FILE: app.js\n```js\n' + '// line\n'.repeat(3500) + 'UNSEEN-TAIL\n```'
+    start()
+    expect(await until(() => latest?.status === 'completed')).toBe(true)
+    expect(latest?.reviewVerdict).toBe('changes_requested')
+    expect(latest?.finalOutput?.nextSteps.join(' ')).toContain('Split the task')
+  })
+})
+
+describe('live driver — attached files', () => {
+  const attached = (name: string, content: string) => ({ name, content, truncated: false, tokens: 10, secrets: 0 })
+
+  it('sends attachment contents to the planner only; workers get what the planner copies into briefs', async () => {
+    liveDriver.start(
+      { ...req('Build the thing described in the attachment'), attachments: ['spec.md'], attachmentFiles: [attached('spec.md', 'ATTACHED-SENTINEL: the API has three endpoints')] },
+      ctx(), (r) => { latest = r },
+    )
+    await until(() => latest?.status === 'completed')
+    const seen = (c: (typeof calls)[number]) => c.messages.map((m) => m.content).join('\n').includes('ATTACHED-SENTINEL')
+    expect(seen(calls.find((c) => c.role === 'planner')!)).toBe(true)
+    expect(calls.filter((c) => c.role !== 'planner').some(seen)).toBe(false)
+    expect(calls.find((c) => c.role === 'planner')!.messages[1].content).toContain('workers will NOT see these')
+  })
+
+  it('adds nothing to the prompt when there are no attachments', async () => {
+    start()
+    await until(() => latest?.status === 'completed')
+    expect(calls.find((c) => c.role === 'planner')!.messages[1].content).not.toContain('Attached reference files')
   })
 })

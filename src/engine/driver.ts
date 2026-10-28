@@ -1,4 +1,4 @@
-import type { AgentDefinition, Provider, RunMode, Run } from '@/types'
+import type { AgentDefinition, Attachment, Provider, RunMode, Run } from '@/types'
 
 /** Everything the UI knows about a run before it starts. */
 export interface RunRequest {
@@ -6,7 +6,10 @@ export interface RunRequest {
   projectId: string
   mode: RunMode
   requestedAgents: 'auto' | 2 | 3 | 4
+  /** Attached file names (recorded on the task). */
   attachments: string[]
+  /** Their contents, sent to the planner only (live runs). */
+  attachmentFiles?: Attachment[]
 }
 
 export interface DriverContext {

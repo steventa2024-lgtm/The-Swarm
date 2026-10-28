@@ -6,6 +6,9 @@ mod fs;
 mod preview;
 mod provider;
 mod secrets;
+mod cli;
+mod approvals;
+mod telegram;
 
 /// Local persistence lives in SQLite (frontend: src/persistence/storage.ts via
 /// tauri-plugin-sql). Model-provider traffic goes through `provider.rs` so API
@@ -27,8 +30,12 @@ pub fn run() {
                 .build(),
         )
         .manage(provider::Inflight::default())
+        .manage(provider::ApiPolicy::default())
         .manage(fs::ApprovedRoots::default())
         .manage(checks::RunningChecks::default())
+        .manage(cli::CliRuns::default())
+        .manage(approvals::ApprovalBook::default())
+        .manage(telegram::Telegram::default())
         .setup(|app| {
             let roots = fs::load_approved(app.handle());
             app.state::<fs::ApprovedRoots>().set(roots);
@@ -36,13 +43,23 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             provider::provider_request,
+            provider::set_api_policy,
             provider::provider_stream,
             provider::provider_cancel,
             fs::pick_project_folder,
             fs::is_root_approved,
             fs::fs_list_tree,
             fs::fs_read_text,
-            fs::fs_apply,
+            approvals::fs_stage,
+            approvals::fs_apply,
+            cli::cli_chat,
+            cli::cli_cancel,
+            telegram::telegram_status,
+            telegram::telegram_start,
+            telegram::telegram_stop,
+            telegram::telegram_request_approval,
+            telegram::telegram_voice,
+            telegram::telegram_send_voice,
             secrets::secret_set,
             secrets::secret_status,
             secrets::secret_delete,

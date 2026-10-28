@@ -9,7 +9,7 @@ const DAY = 24 * 3_600_000
 /** Tokens in this run that went to paid (non-local) providers. */
 export function paidTokens(metrics: Metrics | undefined, providers: Provider[]): number {
   if (!metrics) return 0
-  const local = new Set(providers.filter((p) => p.local).map((p) => p.id))
+  const local = new Set(providers.filter((p) => p.local || p.subscription).map((p) => p.id))
   return Math.round(metrics.byProvider.filter((u) => !local.has(u.providerId)).reduce((s, u) => s + u.tokens, 0))
 }
 

@@ -18,6 +18,8 @@ export function MetricsRow({ run }: { run: Run | null }) {
   const m = run?.metrics
   const total = m ? m.tokensIn + m.tokensOut : 0
   const paid = paidTokens(m, providers)
+  const subscription = run?.workers.some((w) => providers.some((p) => p.id === w.providerId && p.subscription))
+  const estimated = run?.workers.some((w) => w.usageEstimated)
 
   const slices = useMemo(
     () =>
@@ -36,7 +38,7 @@ export function MetricsRow({ run }: { run: Run | null }) {
   return (
     <div className="grid grid-cols-[1fr_1fr_1.45fr_1fr_1fr] gap-3 max-xl:grid-cols-3 max-lg:grid-cols-2 max-xl:[&>*:nth-child(n+4)]:hidden">
       <MetricCard
-        label="Total tokens" icon={Layers} value={formatTokens(total)} series={m?.tokenSeries ?? [0, 0]}
+        label={estimated ? 'Tokens (estimated)' : 'Total tokens'} icon={Layers} value={formatTokens(total)} series={m?.tokenSeries ?? [0, 0]}
         footer={
           <div>
             <div className="flex justify-between font-mono text-[10.5px] text-ink-3">
@@ -51,7 +53,7 @@ export function MetricsRow({ run }: { run: Run | null }) {
       />
 
       <MetricCard
-        label="Estimated cost" icon={Coins} color="#7dd3fc" value={formatCost(m?.costUsd ?? 0)}
+        label={subscription ? 'Subscription cost' : 'Estimated cost'} icon={Coins} color="#7dd3fc" value={subscription ? 'Unreported' : formatCost(m?.costUsd ?? 0)}
         footer={
           <div>
             <Sparkline data={m?.costSeries ?? [0, 0]} color="#7dd3fc" height={26} />
@@ -98,7 +100,7 @@ export function MetricsRow({ run }: { run: Run | null }) {
           <HeartPulse className="h-3.5 w-3.5 text-ok" />
         </div>
         <div className="mt-1.5 flex items-baseline gap-1.5">
-          <span className="font-mono text-[22px] font-semibold leading-none text-ink">{okRate}</span>
+          <span className="font-mono text-[22px] font-semibold leading-none text-ink">{recent.length ? okRate : '—'}</span>
           <span className="text-[11px] text-ink-3">% success</span>
         </div>
         <div className="mt-2.5 flex gap-1">

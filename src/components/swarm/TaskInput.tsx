@@ -1,5 +1,6 @@
-import { CornerDownLeft, Paperclip, Rocket, X } from 'lucide-react'
-import { useRef, type KeyboardEvent } from 'react'
+import { AlertTriangle, CornerDownLeft, Paperclip, Rocket, X } from 'lucide-react'
+import { useRef, useState, type KeyboardEvent } from 'react'
+import { readAttachment } from '@/lib/attachments'
 import { MODE_META } from '@/lib/meta'
 import { useApp } from '@/store/app'
 import { useSwarm } from '@/store/swarm'
@@ -16,6 +17,7 @@ export function TaskInput() {
   const { setPrompt, setMode, setAgentCount, addAttachment, removeAttachment, start } = useSwarm.getState()
   const templates = useApp((s) => s.templates)
   const fileRef = useRef<HTMLInputElement>(null)
+  const [attachNote, setAttachNote] = useState<string | null>(null)
 
   const submit = () => start()
   const onKey = (e: KeyboardEvent) => {
@@ -40,11 +42,18 @@ export function TaskInput() {
           />
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {attachments.map((a) => (
-              <span key={a} className="inline-flex items-center gap-1 rounded-md border border-line bg-white/[0.04] px-1.5 py-0.5 font-mono text-[10.5px] text-ink-2">
-                {a}
-                <button onClick={() => removeAttachment(a)} aria-label={`Remove ${a}`} className="text-ink-4 hover:text-ink"><X className="h-3 w-3" /></button>
+              <span
+                key={a.name}
+                title={a.secrets ? 'This file contains something that looks like an API key or secret. It will be sent to your providers.' : a.truncated ? 'Large file: only the first part is attached.' : `About ${a.tokens.toLocaleString()} tokens`}
+                className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-mono text-[10.5px] ${a.secrets ? 'border-warn/50 bg-warn/10 text-warn' : 'border-line bg-white/[0.04] text-ink-2'}`}
+              >
+                {a.secrets > 0 && <AlertTriangle className="h-3 w-3" />}
+                {a.name}
+                <span className="text-ink-4">~{a.tokens >= 1000 ? `${(a.tokens / 1000).toFixed(1)}K` : a.tokens} tok{a.truncated ? ' · cut' : ''}</span>
+                <button onClick={() => removeAttachment(a.name)} aria-label={`Remove ${a.name}`} className="text-ink-4 hover:text-ink"><X className="h-3 w-3" /></button>
               </span>
             ))}
+            {attachNote && <span className="text-[11px] text-warn">{attachNote}</span>}
             {!prompt && attachments.length === 0 && (
               <>
                 <span className="text-[11px] text-ink-4">Try</span>
@@ -88,12 +97,19 @@ export function TaskInput() {
               type="file"
               multiple
               hidden
-              onChange={(e) => {
-                Array.from(e.target.files ?? []).forEach((f) => addAttachment(f.name))
+              onChange={async (e) => {
+                const picked = Array.from(e.target.files ?? [])
                 e.target.value = ''
+                const problems: string[] = []
+                for (const f of picked) {
+                  const r = await readAttachment(f)
+                  if (r.ok) addAttachment(r.attachment)
+                  else problems.push(r.reason)
+                }
+                setAttachNote(problems[0] ?? null)
               }}
             />
-            <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} title="Attach context files">
+            <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} title="Attach text files as reference. Only the planner reads them, and they are sent to your providers.">
               <Paperclip className="h-3.5 w-3.5" />Context
             </Button>
             <Button variant="primary" size="md" className="flex-1" disabled={!prompt.trim()} onClick={submit}>

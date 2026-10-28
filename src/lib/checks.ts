@@ -68,3 +68,26 @@ export function buildFixPrompt(opts: { label: string; output: string; originalTa
 }
 
 export const formatDurationMs = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`)
+
+/**
+ * Turns an unfinished review into a follow-up prompt: the reviewer's open issues plus any failed checks.
+ * Returns null when there is nothing to act on.
+ */
+export function buildReviewFixPrompt(opts: {
+  issues: string[]
+  failedChecks?: string[]
+  originalTask?: string
+  files?: string[]
+}): string | null {
+  const issues = opts.issues.map((i) => i.replace(/^Resolve:\s*/i, '').trim()).filter(Boolean)
+  const failed = (opts.failedChecks ?? []).filter(Boolean)
+  if (issues.length === 0 && failed.length === 0) return null
+  return [
+    'Address the problems found in the previous attempt. Change only what is needed, and keep what already works.',
+    '',
+    issues.length ? `Reviewer's open issues:\n${issues.map((i) => `- ${i}`).join('\n')}` : '',
+    failed.length ? `Checks that did not pass:\n${failed.map((c) => `- ${c}`).join('\n')}` : '',
+    opts.files?.length ? `Files from the previous attempt: ${opts.files.slice(0, 12).join(', ')}` : '',
+    opts.originalTask ? `Original task: ${opts.originalTask.slice(0, 600)}` : '',
+  ].filter(Boolean).join('\n\n')
+}

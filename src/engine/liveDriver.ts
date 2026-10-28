@@ -2,6 +2,7 @@ import { adapterFor, isAbort, type ChatResult } from '@/providers'
 import { skillFor } from '@/data/skills'
 import { ROLE_META } from '@/lib/meta'
 import { cleanPath, listTree, readText } from '@/lib/fsBridge'
+import { renderAttachments } from '@/lib/attachments'
 import { paidTokens } from '@/lib/budget'
 import { clamp, formatTokens, uid } from '@/lib/utils'
 import type {
@@ -9,6 +10,7 @@ import type {
 } from '@/types'
 import type { DriverContext, OrchestratorDriver, RunController, RunRequest } from './driver'
 import { createRun } from './simulator'
+import { scheduleTasks, validateDependencies } from './scheduler'
 
 /**
  * Live orchestrator: the planner, each worker and the reviewer are real model
@@ -24,6 +26,7 @@ const EXPECTED = { plan: 450, worker: 1100, review: 350 }
 const FILE_HEADER = /^#{2,4}\s*FILE:\s*(.+?)\s*$/gm
 
 interface PlannedSubtask {
+  dependsOn?: unknown
   role?: string; title?: string; description?: string; files?: unknown; checklist?: unknown
   skip?: boolean; brief?: unknown; spec?: unknown; acceptance?: unknown
 }
@@ -150,13 +153,14 @@ export const liveDriver: OrchestratorDriver = {
     const { signal } = abort
 
     if (ctx.providers.length === 0) {
-      return failImmediately(req, ctx, onUpdate)
+      return failImmediately(req, ctx, onUpdate, req.mode === 'local-only' ? 'Local Only mode needs a verified local model. Connect Ollama in Integrations. Nothing was sent to any provider.' : undefined)
     }
 
     const { run, script } = createRun(req, ctx)
+    run.source = 'live'
 
     // Strict budget: don't even start a run that would spend paid tokens once the daily limit is already used.
-    const isPaid = (providerId: string) => !ctx.providers.find((p) => p.id === providerId)?.local
+    const isPaid = (providerId: string) => { const p = ctx.providers.find((p) => p.id === providerId); return !p?.local && !p?.subscription }
     const budget = ctx.budget
     if (budget && budget.mode === 'strict' && budget.usedBefore >= budget.limit && run.workers.some((w) => isPaid(w.providerId))) {
       return failImmediately(req, ctx, onUpdate, `Daily paid-token budget reached (${formatTokens(budget.usedBefore)} of ${formatTokens(budget.limit)}). Raise it in Settings, change the budget mode, or use local models.`, 'Budget reached')
@@ -181,7 +185,7 @@ export const liveDriver: OrchestratorDriver = {
     }
 
     const event = (kind: ActivityKind, message: string, w?: Worker) => {
-      run.events = [{ id: uid('ev'), at: run.elapsedMs, kind, message, workerId: w?.id, role: w?.role }, ...run.events].slice(0, 80)
+      run.events = [{ id: uid('ev'), at: run.elapsedMs, kind, message, workerId: w?.id, role: w?.role, taskId: w?.subtaskId ?? run.task.id }, ...run.events].slice(0, 200)
     }
 
     const timeline = (): TimelineEntry[] => {
@@ -326,6 +330,9 @@ export const liveDriver: OrchestratorDriver = {
     ): Promise<ChatResult> => {
       throwIfAborted()
       const provider = ctx.providers.find((p) => p.id === w.providerId)!
+      const toolRunId = uid('tool')
+      event('info', `${provider.kind === 'cli' ? 'Signed-in CLI' : 'Model request'} started: ${provider.name}`, w)
+      run.events[0].toolRunId = toolRunId
       let text = ''
       w.tokensIn = Math.ceil(messages.reduce((n, m) => n + m.content.length, 0) / 4)
       w.tokensOut = 0
@@ -359,6 +366,9 @@ export const liveDriver: OrchestratorDriver = {
       }
       w.tokensIn = result.usage.inputTokens
       w.tokensOut = result.usage.outputTokens
+      w.usageEstimated = result.usage.estimated
+      event('info', `Model request finished · ${result.usage.estimated ? 'estimated' : 'reported'} token usage`, w)
+      run.events[0].toolRunId = toolRunId
       return result
     }
 
@@ -410,7 +420,7 @@ export const liveDriver: OrchestratorDriver = {
       const roleList = workers.map((w) => `- ${w.role}: ${ROLE_META[w.role].label}`).join('\n')
       const system = `${skillOf(planner)}\n\nReply with a single JSON object and nothing else.`
       const user =
-        `${project}MASTER PROMPT:\n${req.prompt}${notes}${treeNote}\n\n` +
+        `${project}MASTER PROMPT:\n${req.prompt}${renderAttachments(req.attachmentFiles ?? [])}${notes}${treeNote}\n\n` +
         `Agents available (at most one subtask each):\n${roleList}\n\n` +
         'Rules: the master prompt always wins; project notes are background and apply only where they genuinely fit the request. ' +
         'Include a brief for EVERY listed role (or mark it skip). ' +
@@ -420,14 +430,14 @@ export const liveDriver: OrchestratorDriver = {
         'JSON shape: {"summary":"<2 sentences>","contract":"<shared decisions: file layout, names, signatures, data shapes>",' +
         '"subtasks":[{"role":"<role>","skip":false,"title":"<short title>","brief":"<self-contained instructions>",' +
         '"spec":"<requirements quoted from the master prompt that concern this role, max 600 chars>",' +
-        '"acceptance":["<criterion>","<criterion>"],"files":["<path owned by this role>"],' +
+        '"acceptance":["<criterion>","<criterion>"],"files":["<path owned by this role>"],"dependsOn":["<role that must finish first, or empty>"],' +
         '"checklist":["<2-4 word step>","<step>","<step>","<step>"]}]}'
 
       const res = await call(planner, [{ role: 'system', content: system }, { role: 'user', content: user }], PLAN_TOKENS, EXPECTED.plan, { json: true })
       planner.progress = 100
       const parsed = extractJson<{ summary?: unknown; contract?: unknown; subtasks?: PlannedSubtask[] }>(res.text)
-      const planned = parsed?.subtasks ?? []
-      if (planned.length === 0) event('warning', 'Planner returned no usable JSON — falling back to the built-in plan', planner)
+      const planned = Array.isArray(parsed?.subtasks) ? parsed.subtasks.filter((p) => p && typeof p === 'object') : []
+      if (planned.length === 0) throw new Error('Planner returned no usable task plan. No workers were launched; retry with a model that supports structured planning.')
       contract = str(parsed?.contract)
       planSummary = str(parsed?.summary)
 
@@ -453,8 +463,8 @@ export const liveDriver: OrchestratorDriver = {
         // The simulator's placeholder paths mean nothing for a real task: with no usable list, let the model choose.
         fallback.files = files.map((path) => ({ path, type: 'added' as const }))
 
-        const title = str(p?.title, fallback.title)
-        const description = str(p?.description, fallback.description)
+        const title = str(p?.title, `${w.role} task`)
+        const description = str(p?.description, str(p?.brief, title))
         const skip = !skipAll && wantsSkip(w.role)
         const brief = str(p?.brief, planned.length ? description : `${description}\n\nMaster prompt:\n${req.prompt.slice(0, 2000)}`)
         briefs.set(w.id, { brief, spec: str(p?.spec).slice(0, 900), acceptance: strList(p?.acceptance).slice(0, 5), skip, reason: skip ? 'The planner found nothing for this role.' : '' })
@@ -464,6 +474,14 @@ export const liveDriver: OrchestratorDriver = {
         return { id: uid('st'), title, description, role: w.role, status: 'pending', dependsOn: [] }
       })
       workers.forEach((w, i) => { w.subtaskId = run.subtasks[i].id })
+      for (const task of run.subtasks) {
+        task.dependsOn = strList(planned.find((p) => p.role === task.role)?.dependsOn).map((role) => {
+          const dependency = run.subtasks.find((t) => t.role === role)
+          if (!dependency) throw new Error(`Planner specified an unavailable dependency: ${role}`)
+          return dependency.id
+        })
+      }
+      validateDependencies(run.subtasks)
       const active = workers.filter((w) => !briefs.get(w.id)?.skip).length
       planner.status = 'done'
       planner.endedAt = run.elapsedMs
@@ -508,7 +526,8 @@ export const liveDriver: OrchestratorDriver = {
       const ownership =
         (files.length ? `Files you own: ${files.join(', ')}` : 'You own no files yet: create only NEW files that fit your role (for example tests/… or docs/…).') +
         (others.length ? `\nFiles owned by other agents — never write these: ${others.join(', ')}` : '')
-      const existing = await loadExisting(files)
+      const dependencyOutput = workers.filter((x) => st.dependsOn.includes(x.subtaskId ?? '')).map((x) => `\n\nDependency ${x.name}:\n${(outputs.get(x.id) ?? '').slice(0, 16000)}`).join('')
+      const existing = await loadExisting(files) + dependencyOutput
       // The full master prompt is only sent when it's tiny; otherwise the brief + quoted spec carry it.
       const master = req.prompt.length <= 600 ? `\n\nMaster prompt: ${req.prompt}` : ''
       const user =
@@ -530,6 +549,7 @@ export const liveDriver: OrchestratorDriver = {
               lastFile = cur
               w.recentAction = `Writing ${cur}`
               event('code', `Writing ${cur}`, w)
+              run.events[0].artifactPath = cleanPath(cur) ?? undefined
             } else if (!cur) w.recentAction = 'Drafting approach'
           },
         })
@@ -559,17 +579,19 @@ export const liveDriver: OrchestratorDriver = {
       reviewer.recentAction = 'Reading worker output'
       event('review', `All workers finished — ${reviewer.name} starting review`, reviewer)
 
-      // Reviewers are premium but low-volume: send a compact digest, not whole files.
+      // Truncated context must never silently approve unseen proposed contents.
+      let remaining = 24_000
+      let complete = true
       const digest = workers
         .filter((w) => !briefs.get(w.id)?.skip)
         .map((w) => {
           const text = outputs.get(w.id) ?? ''
-          const parsedFiles = parseFiles(text)
-          const files = parsedFiles.map((f) => `${f.path} (${f.lines} lines)`).join(', ') || 'no files'
-          const excerpt = parsedFiles.slice(0, 2).map((f) => `--- ${f.path} ---\n${f.content.slice(0, 900)}`).join('\n')
+          const included = text.slice(0, remaining)
+          remaining -= included.length
+          if (included.length < text.length) complete = false
           const acc = briefs.get(w.id)?.acceptance ?? []
-          return `## ${ROLE_META[w.role].label} — ${w.status}\nSummary: ${firstParagraph(text) || w.recentAction}\n` +
-            `${acc.length ? `Acceptance: ${acc.join(' | ')}\n` : ''}Files: ${files}${excerpt ? `\n${excerpt}` : ''}`
+          return `## ${ROLE_META[w.role].label} — ${w.status}\n` +
+            `${acc.length ? `Acceptance: ${acc.join(' | ')}\n` : ''}${included || w.recentAction}${included.length < text.length ? '\n[OUTPUT TRUNCATED — cannot approve this revision]' : ''}`
         })
         .join('\n\n')
       const system = `${skillOf(reviewer)}\n\nReply with a single JSON object and nothing else.`
@@ -584,15 +606,17 @@ export const liveDriver: OrchestratorDriver = {
       reviewer.checklist.forEach((c) => { c.done = true })
       reviewer.status = 'done'
       reviewer.endedAt = run.elapsedMs
-      reviewer.recentAction = 'Merged and finalised'
-      reviewer.summary = 'All worker output reviewed'
+      reviewer.recentAction = 'Review finished'
+      reviewer.summary = complete ? 'Proposed output reviewed' : 'Review incomplete: output exceeded review context limit'
 
       const verdict = extractJson<{ verdict?: string; summary?: unknown; issues?: unknown; nextSteps?: unknown }>(res.text)
-      const failed = workers.filter((w) => w.status === 'error').length
+      const failed = workers.filter((w) => w.status === 'error' || w.status === 'waiting').length
       const worked = workers.filter((w) => !briefs.get(w.id)?.skip)
-      const approved = verdict?.verdict === 'approve' && failed === 0
-      const summary = strList(verdict?.summary)
       const issues = strList(verdict?.issues)
+      if (!complete) issues.push('Proposal exceeds the 24,000-character review limit. Split the task and review smaller proposals.')
+      const approved = verdict?.verdict === 'approve' && failed === 0 && issues.length === 0
+      run.reviewVerdict = approved ? 'approved' : 'changes_requested'
+      const summary = strList(verdict?.summary)
       refreshFiles()
       const out: FinalOutput = {
         headline: `${run.task.title} — ${approved ? 'complete' : 'needs attention'}`,
@@ -617,9 +641,14 @@ export const liveDriver: OrchestratorDriver = {
         emit()
         await waitIfPaused()
         // Wait for every worker to settle (not just the first failure) so none can touch the run after we finalise.
-        const settled = await Promise.allSettled(workers.map(async (w, i) => { await new Promise((r) => setTimeout(r, i * 150)); await runWorker(w) }))
-        const failure = settled.find((r): r is PromiseRejectedResult => r.status === 'rejected')
-        if (failure) throw failure.reason
+        await scheduleTasks(run.subtasks, ctx.maxWorkers, async (task) => {
+          await waitIfPaused()
+          await runWorker(workers.find((w) => w.subtaskId === task.id)!)
+        }, waitIfPaused, signal, (task) => {
+          const worker = workers.find((w) => w.subtaskId === task.id)!
+          worker.status = 'waiting'; worker.recentAction = 'Blocked by a failed dependency'
+          event('warning', worker.recentAction, worker)
+        })
         if (workers.every((w) => w.status === 'error')) throw new Error('Every worker failed — check the provider connection and model names.')
         phase = 'reviewing'
         emit()
@@ -688,12 +717,13 @@ function errMsg(e: unknown): string {
 }
 
 /** No verified provider: surface a failed run with an actionable message instead of a silent no-op. */
-function failImmediately(
+export function failImmediately(
   req: RunRequest, ctx: DriverContext, onUpdate: (run: Run) => void,
   message = 'No verified provider. Open Integrations and connect one (e.g. Ollama) before starting a live run.',
   action = 'No verified provider',
 ): RunController {
-  const { run } = createRun(req, { ...ctx, providers: [{ id: 'none', name: 'none', kind: 'ollama', endpoint: '', local: true, status: 'connected', models: [{ id: 'none', label: 'No provider', tier: 'local', contextWindow: 0, inputCostPer1M: 0, outputCostPer1M: 0, tokensPerSecond: 1 }] }] })
+  const { run } = createRun(req, { ...ctx, agents: ctx.agents.map((a) => ({ ...a, providerId: 'none', modelId: 'none' })), providers: [{ id: 'none', name: 'none', kind: 'ollama', endpoint: '', local: true, status: 'connected', models: [{ id: 'none', label: 'No provider', tier: 'local', contextWindow: 0, inputCostPer1M: 0, outputCostPer1M: 0, tokensPerSecond: 1 }] }] })
+  run.source = 'live'
   run.status = 'failed'
   run.workers.forEach((w) => { w.status = 'idle'; w.recentAction = '—' })
   run.workers[0].status = 'error'

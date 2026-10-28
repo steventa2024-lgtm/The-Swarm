@@ -4,6 +4,7 @@ import { useApp } from '@/store/app'
 import type { ProviderKind } from '@/types'
 
 const ICON: Record<ProviderKind, typeof Cloud> = {
+  cli: Cpu,
   anthropic: Cloud,
   'openai-compatible': Cloud,
   openrouter: Network,

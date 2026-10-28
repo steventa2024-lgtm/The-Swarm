@@ -26,6 +26,7 @@ export function ProjectsPage() {
   const activeId = useApp((s) => s.activeProjectId)
   const updateProject = useApp((s) => s.updateProject)
   const [selectedId, setSelected] = useState(activeId)
+  const [name, setName] = useState('')
   const selected = projects.find((p) => p.id === selectedId) ?? projects[0]
   const runs = history.filter((h) => h.projectId === selected?.id).slice(0, 6)
 
@@ -33,6 +34,7 @@ export function ProjectsPage() {
     <div className="h-full overflow-y-auto p-6">
       <div className="mx-auto max-w-[1180px]">
         <PageHeader title="Projects" description="Repositories and folders your swarm can work in. Workers only touch paths you approve." />
+        <form className="mb-5 flex gap-3" onSubmit={(e) => { e.preventDefault(); if (name.trim()) { useApp.getState().addProject(name.trim()); setName('') } }}><input aria-label="New project name" className="rounded-lg border hairline bg-night px-3 py-2" placeholder="New project name" value={name} maxLength={100} onChange={(e) => setName(e.target.value)} /><Button type="submit" variant="primary" disabled={!name.trim()}>Create project</Button></form>
         <div className="grid grid-cols-[1fr_360px] gap-5 max-xl:grid-cols-1">
           <div className="grid grid-cols-2 gap-3 max-lg:grid-cols-1">
             {projects.map((p, i) => (

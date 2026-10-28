@@ -15,7 +15,15 @@ use std::{
 
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use tauri::{ipc::Channel, State};
+use tauri::{ipc::Channel, State, AppHandle};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+
+#[derive(Default)] pub struct ApiPolicy(AtomicBool);
+#[tauri::command]
+pub async fn set_api_policy(app: AppHandle, enabled: bool, policy: State<'_, ApiPolicy>) -> Result<(), String> {
+    if enabled && !app.dialog().message("Zero, enable paid API adapters for this app session? These are billed separately from your subscriptions.").title("Enable paid APIs").buttons(MessageDialogButtons::OkCancel).blocking_show() { return Err("Paid APIs remain disabled".into()) }
+    policy.0.store(enabled, Ordering::Relaxed); Ok(())
+}
 
 #[derive(Default)]
 pub struct Inflight(Mutex<HashMap<String, Arc<AtomicBool>>>);
@@ -48,6 +56,7 @@ pub struct ProviderResponse {
 
 fn client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(Duration::from_secs(10))
         // Local models can pause for a long time while loading; this only trips on a dead socket.
         .read_timeout(Duration::from_secs(300))
@@ -55,8 +64,10 @@ fn client() -> Result<reqwest::Client, String> {
         .map_err(|e| e.to_string())
 }
 
-fn build(req: &ProviderRequest) -> Result<reqwest::RequestBuilder, String> {
+fn build(req: &ProviderRequest, allow_paid: bool) -> Result<reqwest::RequestBuilder, String> {
     let url = reqwest::Url::parse(&req.url).map_err(|e| format!("Invalid URL: {e}"))?;
+    let local = matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
+    if !local && !allow_paid { return Err("Paid API adapters are disabled. Use a signed-in CLI or enable paid APIs explicitly in Settings.".into()) }
     if url.scheme() != "http" && url.scheme() != "https" {
         return Err("Only http and https endpoints are allowed".into());
     }
@@ -67,6 +78,7 @@ fn build(req: &ProviderRequest) -> Result<reqwest::RequestBuilder, String> {
         rb = rb.header(k, v);
     }
     if let Some(auth) = &req.auth {
+        if auth.env.starts_with("TELEGRAM_") { return Err("Telegram credentials are restricted to the Telegram integration".into()) }
         if !crate::secrets::valid_secret_name(&auth.env) {
             return Err(format!("'{}' is not an allowed key variable name (must end in KEY or TOKEN)", auth.env));
         }
@@ -86,8 +98,8 @@ fn trim(s: &str) -> String {
 }
 
 #[tauri::command]
-pub async fn provider_request(req: ProviderRequest) -> Result<ProviderResponse, String> {
-    let resp = build(&req)?.send().await.map_err(|e| format!("Request failed: {e}"))?;
+pub async fn provider_request(req: ProviderRequest, policy: State<'_, ApiPolicy>) -> Result<ProviderResponse, String> {
+    let resp = build(&req, policy.0.load(Ordering::Relaxed))?.send().await.map_err(|e| format!("Request failed: {e}"))?;
     let status = resp.status().as_u16();
     let body = resp.text().await.map_err(|e| e.to_string())?;
     Ok(ProviderResponse { status, body })
@@ -98,12 +110,13 @@ pub async fn provider_stream(
     req: ProviderRequest,
     on_chunk: Channel<String>,
     state: State<'_, Inflight>,
+    policy: State<'_, ApiPolicy>,
 ) -> Result<u16, String> {
     let cancel = Arc::new(AtomicBool::new(false));
     state.0.lock().unwrap().insert(req.id.clone(), cancel.clone());
 
     let result = async {
-        let resp = build(&req)?.send().await.map_err(|e| format!("Request failed: {e}"))?;
+        let resp = build(&req, policy.0.load(Ordering::Relaxed))?.send().await.map_err(|e| format!("Request failed: {e}"))?;
         let status = resp.status();
         if !status.is_success() {
             let body = resp.text().await.unwrap_or_default();

@@ -12,6 +12,7 @@
 const MASK = '[REDACTED]'
 
 const TOKENS: RegExp[] = [
+  /\b\d{6,12}:[A-Za-z0-9_-]{30,}\b/g, // Telegram bot token
   /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
   /\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}/g, // OpenAI / Anthropic
   /\bgh[pousr]_[A-Za-z0-9]{20,}/g, // GitHub

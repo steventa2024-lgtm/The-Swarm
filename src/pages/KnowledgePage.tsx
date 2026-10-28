@@ -13,7 +13,7 @@ import type { MemoryKind } from '@/types'
 const KINDS: Record<MemoryKind, { label: string; icon: LucideIcon; color: string }> = {
   note: { label: 'Note', icon: StickyNote, color: '#7dd3fc' },
   decision: { label: 'Decision', icon: GitCommitHorizontal, color: '#4d9bff' },
-  doc: { label: 'Indexed doc', icon: FileText, color: '#22d3ee' },
+  doc: { label: 'Document', icon: FileText, color: '#22d3ee' },
   'repo-summary': { label: 'Repo summary', icon: Lightbulb, color: '#8aa4ff' },
 }
 
@@ -55,7 +55,7 @@ export function KnowledgePage() {
       <div className="mx-auto max-w-[1180px]">
         <PageHeader
           title="Knowledge"
-          description={`Project memory the swarm reads before every run. ${totalUses} context pulls so far.`}
+          description={`Notes the planner reads when they relate to your prompt (unrelated ones are left out to save tokens and avoid misleading the plan). Used ${totalUses} time${totalUses === 1 ? '' : 's'} so far.`}
           actions={<Button variant="primary" onClick={() => setAdding((a) => !a)}><Plus className="h-4 w-4" />Add entry</Button>}
         />
 

@@ -8,3 +8,10 @@ src-tauri/gen
 *.tsbuildinfo
 .DS_Store
 Thumbs.db
+.env
+.env.*
+*.exe
+*.pdb
+*.key
+*.pem
+artifacts/

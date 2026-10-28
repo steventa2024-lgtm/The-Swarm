@@ -9,6 +9,8 @@ import type { Tone } from '@/lib/meta'
 import { testConnection } from '@/providers'
 import { useApp } from '@/store/app'
 import type { Integration } from '@/types'
+import { TEAM } from '@/data/team'
+import { TelegramPanel } from '@/components/swarm/TelegramPanel'
 
 const CATS: { id: Integration['category']; title: string; icon: LucideIcon }[] = [
   { id: 'provider', title: 'Model providers', icon: Cloud },
@@ -61,6 +63,8 @@ export function IntegrationsPage() {
           title="Integrations"
           description="Approved connections only. Providers are configured with your own keys or local endpoints — the swarm never rotates accounts or works around provider limits. Live runs only use providers that pass a connection test."
         />
+        <section><SectionTitle>Subscription CLIs · no API fallback</SectionTitle><div className="grid grid-cols-3 gap-3 max-lg:grid-cols-2">{TEAM.filter((t) => t.id !== 'ollama').map((member) => { const provider = providers.find((p) => p.id === member.id); const result = tests[member.id]; return <div key={member.id} className="mission-panel space-y-3 p-4"><h2 className="font-semibold" style={{ color: member.color }}>{member.name}</h2><p className="text-xs text-ink-2">{member.title}</p><p className="text-xs leading-relaxed text-ink-3">{member.setup}</p><p className="text-[11px] text-ink-3">Personality (optional): {member.personality}</p><p className="text-xs">{provider?.verified ? 'Verified by a real CLI response' : member.id === 'grok' ? 'Manual · automation unavailable' : 'Not verified'}</p>{result?.message && <p className={`text-xs ${result.ok ? 'text-ok' : 'text-bad'}`}>{result.message}</p>}<div className="flex items-center gap-3">{provider && <Button size="sm" variant="outline" disabled={result?.busy} onClick={() => void test(member.id)}>{result?.busy ? 'Probing…' : 'Test signed-in CLI'}</Button>}<a className="text-xs text-azure-hi underline" href={member.docs} target="_blank" rel="noreferrer">Setup ↗</a></div></div> })}</div></section>
+        <TelegramPanel />
         {CATS.map((cat) => {
           const items = integrations.filter((i) => i.category === cat.id)
           if (!items.length) return null
@@ -93,7 +97,7 @@ export function IntegrationsPage() {
                             {provider.verified && (
                               <Button variant="ghost" size="sm" onClick={() => updateProvider(provider.id, { verified: false, status: 'disconnected' })}>Disconnect</Button>
                             )}
-                            <Button variant={provider.verified ? 'outline' : 'primary'} size="sm" disabled={t?.busy} onClick={() => test(provider.id)}>
+                            <Button variant={provider.verified ? 'outline' : 'primary'} size="sm" disabled={t?.busy || (!provider.local && !useApp.getState().preferences.paidApisEnabled)} onClick={() => test(provider.id)} title={!provider.local ? 'Paid APIs must be explicitly enabled in Settings first' : undefined}>
                               {t?.busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                               {provider.verified ? 'Re-test' : 'Test & connect'}
                             </Button>

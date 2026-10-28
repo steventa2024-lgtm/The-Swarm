@@ -5,11 +5,12 @@ import { useSwarm } from '@/store/swarm'
 
 export function RunControlBar() {
   const status = useSwarm((s) => s.run?.status ?? 'idle')
+  const replaying = useSwarm((s) => s.replaying)
   const { pause, resume, stop, reset } = useSwarm.getState()
 
-  const live = status === 'planning' || status === 'running' || status === 'reviewing'
-  const paused = status === 'paused'
-  const finished = status === 'completed' || status === 'stopped' || status === 'failed'
+  const live = !replaying && (status === 'planning' || status === 'running' || status === 'reviewing')
+  const paused = !replaying && status === 'paused'
+  const finished = replaying || status === 'completed' || status === 'stopped' || status === 'failed'
 
   return (
     <div className="flex items-center gap-1.5">

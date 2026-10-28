@@ -25,3 +25,23 @@ describe('relevantNotes', () => {
     expect(relevantNotes(seedMemory, 'make it work')).toEqual([])
   })
 })
+
+import { useApp } from '@/store/app'
+
+describe('noteUsed', () => {
+  it('counts a use for exactly the notes that were sent, and nothing else', () => {
+    useApp.setState({ memory: structuredClone(seedMemory) })
+    const before = Object.fromEntries(useApp.getState().memory.map((m) => [m.id, m.uses]))
+    useApp.getState().noteUsed(['mem-3', 'mem-4'])
+    const after = Object.fromEntries(useApp.getState().memory.map((m) => [m.id, m.uses]))
+    expect(after['mem-3']).toBe(before['mem-3'] + 1)
+    expect(after['mem-4']).toBe(before['mem-4'] + 1)
+    expect(after['mem-1']).toBe(before['mem-1'])
+  })
+  it('ignores unknown ids and an empty list', () => {
+    const snapshot = JSON.stringify(useApp.getState().memory)
+    useApp.getState().noteUsed([])
+    useApp.getState().noteUsed(['does-not-exist'])
+    expect(JSON.stringify(useApp.getState().memory)).toBe(snapshot)
+  })
+})

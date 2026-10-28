@@ -11,6 +11,7 @@ import { clearRuns, listRuns } from '@/persistence/runStore'
 import { useApp } from '@/store/app'
 import { useSwarm } from '@/store/swarm'
 import type { Preferences, RunMode } from '@/types'
+import { clearFlights } from '@/persistence/flightRecorder'
 
 function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
@@ -41,6 +42,7 @@ export function SettingsPage() {
   const updateProvider = useApp((s) => s.updateProvider)
   const resetData = useApp((s) => s.resetData)
   const [saved, setSaved] = useState<number | null>(null)
+  const [policyError, setPolicyError] = useState('')
   useEffect(() => { listRuns().then((l) => setSaved(l.length)).catch(() => setSaved(0)) }, [])
   const p = <K extends keyof Preferences>(k: K) => (v: Preferences[K]) => set({ [k]: v } as Partial<Preferences>)
 
@@ -48,6 +50,13 @@ export function SettingsPage() {
     <div className="h-full overflow-y-auto p-6">
       <div className="mx-auto max-w-[860px] space-y-4">
         <PageHeader title="Settings" description="Preferences are stored locally on this device." />
+        <Section title="Owner controls" description="Zero is the only approver. Agent personalities never change permissions.">
+          <Row label="Paid API adapters" hint="Off on every launch. Subscription CLIs and local models remain available. Enabling requires native owner confirmation."><Switch checked={!!prefs.paidApisEnabled} onCheckedChange={async (enabled) => { try { const { invoke } = await import('@tauri-apps/api/core'); await invoke('set_api_policy', { enabled }); set({ paidApisEnabled: enabled }); setPolicyError('') } catch (e) { setPolicyError(String(e)) } }} /></Row>
+          {policyError && <p role="alert" className="text-xs text-bad">{policyError}</p>}
+          <Row label="Personalities" hint="Optional speaking style, visibly labeled in the UI."><Switch checked={!!prefs.personalities} onCheckedChange={p('personalities')} /></Row>
+          <Row label="Inactivity check-ins" hint="Personality only: “Where’s Zero?” after 15 minutes without input in Team Chat. Never starts work."><Switch disabled={!prefs.personalities} checked={!!prefs.inactivityCheckIns} onCheckedChange={p('inactivityCheckIns')} /></Row>
+          <Row label="Clear flight recorder" hint="Removes saved replay frames and recovery checkpoints."><Button variant="danger" size="sm" onClick={() => { if (window.confirm('Delete all flight recordings?')) void clearFlights() }}>Clear recordings</Button></Row>
+        </Section>
 
         <Section title="Appearance">
           <Row label="Theme" hint="Midnight Blue is the only theme in this build."><span className="rounded-lg border border-azure-hi/40 bg-azure/15 px-3 py-1.5 text-xs text-azure-hi">Midnight Blue</span></Row>
@@ -95,7 +104,7 @@ export function SettingsPage() {
         </Section>
 
         <Section title="Providers" description="Endpoints are editable. API keys are read from the environment variable named here — they are never stored in app data.">
-          {providers.map((pr) => (
+          {providers.filter((pr) => pr.kind !== 'cli').map((pr) => (
             <div key={pr.id} className="grid grid-cols-[130px_1fr_170px] items-center gap-3 py-3 first:pt-0 last:pb-0 max-md:grid-cols-1">
               <span className="text-[13px] text-ink">{pr.name}</span>
               <Input value={pr.endpoint} onChange={(e) => updateProvider(pr.id, { endpoint: e.target.value })} className="font-mono text-xs" aria-label={`${pr.name} endpoint`} />

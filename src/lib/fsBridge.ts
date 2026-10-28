@@ -20,7 +20,9 @@ export const pickFolder = () => invoke<string | null>('pick_project_folder', {})
 export const isRootApproved = (root: string) => invoke<boolean>('is_root_approved', { root })
 export const listTree = (root: string, maxEntries = 200) => invoke<string[]>('fs_list_tree', { root, maxEntries })
 export const readText = (root: string, path: string, maxBytes = 8000) => invoke<ReadResult>('fs_read_text', { root, path, maxBytes })
-export const applyFiles = (root: string, files: { path: string; content: string }[]) => invoke<WriteOutcome[]>('fs_apply', { root, files })
+export interface ApprovalInfo { id: string; runId: string; paths: string[]; expiresAt: number; status: string }
+export const stageFiles = (root: string, files: { path: string; content: string; expected: string | null }[], runId: string, reviewPassed: boolean) => invoke<ApprovalInfo>('fs_stage', { root, files, runId, reviewPassed })
+export const applyFiles = (approvalId: string) => invoke<WriteOutcome[]>('fs_apply', { approvalId })
 
 /**
  * Normalises a model-proposed path to a project-relative one, or returns null

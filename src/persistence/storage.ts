@@ -35,7 +35,7 @@ const ls = {
   del: (k: string) => { try { localStorage.removeItem(k) } catch { /* noop */ } },
 }
 
-export const appStorage: StateStorage = {
+function createStorage(strict: boolean): StateStorage { return {
   async getItem(name) {
     const db = await getDb()
     if (!db) return ls.get(name)
@@ -48,24 +48,30 @@ export const appStorage: StateStorage = {
   },
   async setItem(name, value) {
     const db = await getDb()
-    if (!db) return ls.set(name, value)
+    if (!db) return strict ? localStorage.setItem(name, value) : ls.set(name, value)
     try {
       await db.execute(
         'INSERT INTO kv_store (key, value, updated_at) VALUES ($1, $2, unixepoch()) ' +
           'ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at',
         [name, value],
       )
-    } catch {
+    } catch (error) {
+      if (strict) throw error
       ls.set(name, value)
     }
   },
   async removeItem(name) {
     const db = await getDb()
-    if (!db) return ls.del(name)
+    if (!db) return strict ? localStorage.removeItem(name) : ls.del(name)
     try {
       await db.execute('DELETE FROM kv_store WHERE key = $1', [name])
-    } catch {
+    } catch (error) {
+      if (strict) throw error
       ls.del(name)
     }
   },
-}
+} }
+
+export const appStorage = createStorage(false)
+/** Checkpoints must surface failed commits instead of claiming crash recovery is available. */
+export const recorderStorage = createStorage(true)

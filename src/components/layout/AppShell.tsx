@@ -11,27 +11,32 @@ import { SwarmPage } from '@/pages/SwarmPage'
 import { TemplatesPage } from '@/pages/TemplatesPage'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/store/app'
-import { DEMO_PROMPT, useSwarm } from '@/store/swarm'
+import { useSwarm } from '@/store/swarm'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
-
-let demoStarted = false
+import { inTauri } from '@/providers/transport'
 
 export function AppShell() {
   const page = useApp((s) => s.page)
   const hydrated = useApp((s) => s.hydrated)
   const reduceMotion = useApp((s) => s.preferences.reduceMotion)
   const [booted, setBooted] = useState(false)
+  useEffect(() => {
+    if (!inTauri()) return
+    let disposed = false; let unlisten: (() => void) | undefined
+    void import('@tauri-apps/api/event').then(async ({ listen }) => {
+      const stop = await listen<{ runId: string; id: string; status: string; channel: string }>('swarm-approval', ({ payload: p }) => useSwarm.getState().recordOwnerDecision(p.runId, p.id, p.status, p.channel))
+      if (disposed) stop(); else unlisten = stop
+    })
+    return () => { disposed = true; unlisten?.() }
+  }, [])
 
-  // Brief skeleton on launch, then open on a live demo run so the dashboard is never empty.
+  // Restore evidence only; never restart tools or fabricate launch activity.
   useEffect(() => {
     if (!hydrated) return
     const t = window.setTimeout(() => {
       setBooted(true)
-      if (!demoStarted && !useSwarm.getState().run) {
-        demoStarted = true
-        useSwarm.getState().start({ prompt: DEMO_PROMPT, warmupMs: 17_000, record: false })
-      }
+      void useSwarm.getState().recover()
     }, 650)
     return () => window.clearTimeout(t)
   }, [hydrated])

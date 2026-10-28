@@ -13,7 +13,7 @@ What to test, in a sensible order, and what "good" looks like. Each section list
 2. For live runs with local models: install Ollama, run `ollama serve`, and pull at least one coder model (e.g. `ollama pull qwen2.5-coder:7b`). Several different models make the auto-assign test more interesting.
 3. Automated checks (optional but quick):
    ```bash
-   npm test                    # 149 unit tests (adapters, live driver: Stop/Pause/retries/budget, saved runs, redaction, previews…)
+   npm test                    # 173 unit tests (adapters, live driver: Stop/Pause/retries/budget, saved runs, redaction, previews…)
    cd src-tauri && cargo test  # 7 Rust tests (path safety, check detection)
    ```
 
@@ -114,8 +114,22 @@ After **Apply** succeeds, a **Verify the result** panel appears.
 | A failing check | A red banner offers **Ask the team to fix it**; clicking it closes the dialog and puts a prepared prompt in the task box. Review it, then press Run |
 | After running | The check appears in the run's Final output list as pass / fail |
 | No `node_modules` | A hint says to run `npm install` yourself first; the app never installs dependencies |
+| Reviewer left open issues | The final-output dialog shows **Send the issues back to the team**. It closes the dialog and puts a prepared prompt in the task box (issues, failed checks, the files from the first attempt). Apply the changes first so the team can read them |
 
 This **runs your project's own scripts**, so only do it in projects you trust. Each run has a 3-minute timeout.
+
+## 6e. Local Only and attached files ✅
+
+**Local Only** (mode selector in the task box):
+- With Ollama connected and verified: the run uses only local models. The Models tab shows no hosted provider.
+- Disconnect Ollama (or stop `ollama serve`), choose **Local Only**, press Run: the run **fails immediately** with "Local Only mode needs a connected local model … Nothing was sent to any provider." It must never fall back to a hosted model.
+
+**Context attachments** (the paperclip button):
+- Attach a `.md`/`.txt`/source file: a chip shows its name and rough token cost.
+- A file with an API key in it gets an **amber warning chip**; hover for the reason. It is only a warning, the choice is yours.
+- A binary file (image, zip) is refused with a message. A very large file is cut and marked `· cut`.
+- Run a **live** task whose answer depends on the attachment. The planner should use it (its briefs quote the relevant parts). The chips clear when the run starts.
+- Simulated runs ignore attachment contents.
 
 ## 6d. History & saved runs ✅
 
@@ -186,6 +200,8 @@ Open an issue with:
 - [ ] Review & apply writes only selected files; conflicts require a choice
 - [ ] Planner is the only paid model under Token saver ⚠️
 - [ ] Strict budget stops a paid run at the limit; a local run is never blocked ⚠️
+- [ ] Local Only fails cleanly with no local model (never uses a hosted one)
+- [ ] A context file is used by the planner and its chip clears after the run
 - [ ] A finished run can be reopened from History after restarting the app
 - [x] Pause / Resume / Stop behave (verified; re-check on your paid provider ⚠️)
 - [ ] Verify runs your project's tests and a failure offers "Ask the team to fix it"

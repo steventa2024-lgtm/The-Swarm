@@ -62,6 +62,7 @@
 :root {
   color-scheme: dark;
 }
+.mission-panel { background: rgba(13, 22, 35, .94); border: 1px solid rgba(148, 163, 184, .14); border-radius: 12px; }
 
 html, body, #root {
   height: 100%;

@@ -57,9 +57,10 @@ export function prepareForStorage(run: Run, opts: { redact: boolean }): { run: R
 
   const out: Run = {
     ...run,
-    task: { ...run.task, prompt: strict(run.task.prompt), title: strict(run.task.title) },
+    task: { ...run.task, prompt: strict(run.task.prompt), title: strict(run.task.title), attachments: run.task.attachments.map(strict) },
+    subtasks: run.subtasks.map((t) => ({ ...t, title: strict(t.title), description: strict(t.description) })),
     events: run.events.slice(0, MAX_EVENTS).map((e) => ({ ...e, message: strict(e.message) })),
-    workers: run.workers.map((w) => ({ ...w, summary: strict(w.summary), brief: w.brief ? strict(w.brief) : w.brief, recentAction: strict(w.recentAction) })),
+    workers: run.workers.map((w) => ({ ...w, summary: strict(w.summary), brief: w.brief ? strict(w.brief) : w.brief, recentAction: strict(w.recentAction), checklist: w.checklist.map((c) => ({ ...c, label: strict(c.label) })) })),
     fileChanges,
     finalOutput: run.finalOutput && {
       ...run.finalOutput,

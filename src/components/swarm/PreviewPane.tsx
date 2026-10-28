@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { inTauri } from '@/providers/transport'
 import { buildBundle, signature, toSrcdoc, type PreviewFile } from '@/preview/build'
 import type { AgentRole, Run } from '@/types'
+import { useSwarm } from '@/store/swarm'
 
 const DEVICES = {
   desktop: { w: '100%', icon: Monitor, label: 'Desktop' },
@@ -33,6 +34,7 @@ export function previewableFiles(run: Run | null): { path: string; content: stri
 }
 
 export function PreviewPane({ run }: { run: Run | null }) {
+  const replaying = useSwarm((s) => s.replaying)
   const [tab, setTab] = useState<'preview' | 'code'>('preview')
   const [device, setDevice] = useState<Device>('desktop')
   const [src, setSrc] = useState<string | null>(null)
@@ -56,6 +58,7 @@ export function PreviewPane({ run }: { run: Run | null }) {
   useEffect(() => {
     setError(null)
     setPublishError(null)
+    if (replaying) { setSrc(null); setSrcdoc(null); setTab('code'); return }
     if (bundle.kind === 'none') { setSrc(null); setSrcdoc(null); return }
     if (!inTauri()) { setSrc(null); setSrcdoc(toSrcdoc(bundle)); return }
     let cancelled = false
@@ -73,7 +76,7 @@ export function PreviewPane({ run }: { run: Run | null }) {
     return () => { cancelled = true; window.clearTimeout(t) }
     // `sig` changes only when file contents change; `nonce` forces a manual reload.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sig, nonce])
+  }, [sig, nonce, replaying])
 
   useEffect(() => () => {
     if (token.current && inTauri()) void import('@tauri-apps/api/core').then(({ invoke }) => invoke('preview_clear', { token: token.current }))
@@ -91,7 +94,7 @@ export function PreviewPane({ run }: { run: Run | null }) {
 
   const active = codePath ?? files[0]?.path ?? null
   const activeFile = files.find((f) => f.path === active)
-  const building = !!run && ['planning', 'running', 'reviewing'].includes(run.status)
+  const building = !replaying && !!run && ['planning', 'running', 'reviewing'].includes(run.status)
 
   if (!run) {
     return <EmptyState icon={MonitorPlay} title="Nothing to preview yet" description="Run a task that builds something visual — a page, a component, an app — and it will appear here." className="py-24" />

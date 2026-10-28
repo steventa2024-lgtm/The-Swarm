@@ -37,3 +37,26 @@ describe('formatDurationMs', () => {
     expect(formatDurationMs(48_000)).toBe('48 s')
   })
 })
+
+import { buildReviewFixPrompt } from '@/lib/checks'
+
+describe('buildReviewFixPrompt', () => {
+  it('lists the reviewer issues (without the "Resolve:" prefix) and failed checks', () => {
+    const p = buildReviewFixPrompt({
+      issues: ['Resolve: The test for the toggle is missing.', 'Resolve: ToggleButton needs a visual indicator.'],
+      failedChecks: ['npm run test'], originalTask: 'Add a dark mode toggle', files: ['src/App.tsx', 'src/Toggle.tsx'],
+    })!
+    expect(p).toContain("- The test for the toggle is missing.")
+    expect(p).not.toContain('Resolve:')
+    expect(p).toContain('- npm run test')
+    expect(p).toContain('src/App.tsx, src/Toggle.tsx')
+    expect(p).toContain('Original task: Add a dark mode toggle')
+  })
+  it('returns null when there is nothing to fix', () => {
+    expect(buildReviewFixPrompt({ issues: [] })).toBeNull()
+    expect(buildReviewFixPrompt({ issues: ['  '], failedChecks: [''] })).toBeNull()
+  })
+  it('works with only failed checks', () => {
+    expect(buildReviewFixPrompt({ issues: [], failedChecks: ['Lint'] })).toContain('- Lint')
+  })
+})
