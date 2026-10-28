@@ -79,6 +79,6 @@ Polling commits offsets before dispatch to prevent an interrupted action from re
 
 Automated coverage includes identity mismatch, allowlists, bot permission boundaries, independent offsets and restart, failed checkpoint rollback, token lifecycle invalidation, notification deduplication, bounded backoff/quiet hours, safe error handling, native approval races/expiry/replay, durable audit failures, frontend secure credential failures, real-event routing, stale command rejection, and replay exclusion.
 
-The dashboard and configuration page have browser checks; the desktop build is compiled with the same native handlers. **Live `getMe`, six real bot identities, private group access, delivery/receipt, and the harmless owner approval require tokens and Zero's pairing interaction. They must remain unverified until those steps succeed.** No live Telegram success has been inferred from mock tests.
+The dashboard and configuration page have browser checks; the desktop build is compiled with the same native handlers. **All six real bot identities have now passed live `getMe` checks, and their polling receivers are listening. Private group access, delivery/receipt and the harmless owner approval still require Zero's pairing interaction. They remain unverified until those steps succeed.** No live Telegram success has been inferred from mock tests.
 
 Official protocol reference: [Telegram Bot API](https://core.telegram.org/bots/api), including `getMe`, `getUpdates`, `getWebhookInfo`, and `deleteWebhook`.

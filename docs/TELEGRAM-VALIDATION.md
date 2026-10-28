@@ -9,7 +9,7 @@ Development branch: `feat/telegram-multi-bot` in the existing repository history
 - TypeScript checking and Vite production build pass. The existing large-chunk size warning remains nonblocking.
 - Standalone Tauri development executable built: `artifacts/The Swarm Telegram.exe`.
 - Both Playwright browser smoke scripts pass: dashboard, real saved demo, browser-native boundary, replay scrubbing, integration navigation, seven Telegram slots, masked credential fields and disabled browser-only credential actions.
-- Native executable launched and its Telegram page inspected. All seven slots correctly show Not configured, no successful activity, and no fabricated Telegram connection.
+- Native executable launched and its Telegram page inspected. After Zero saved the credentials locally, real Telegram `getMe` checks passed for HQ, Codex, Claude, Gemini, Cursor and Grok. All six independent polling receivers showed Connected and listening. Ollama remains an unconfigured reserved slot.
 - Native coverage includes identity mismatch/nonbot rejection, owner/chat allowlists, per-agent approval restrictions, independent persisted offsets, failed offset rollback, process receiver leases, bot-addressed commands, webhook conflicts, safe error classification, token lifecycle invalidation, managed-credential command restrictions, quiet hours and bounded backoff/deduplication.
 - Approval coverage includes immutable project/task/action context, exact staged readback, racing decisions, one-use/expiry/restart revocation, stale file baselines, high-risk remote intent, harmless probe, and durable audit failure blocking writes.
 - Frontend coverage includes secure-store failures, unavailable native transport, event privacy/routing, replay exclusion, stale remote controls, actual controller acknowledgements, and exact-revision Review without granting approval.
@@ -18,16 +18,16 @@ Development branch: `feat/telegram-multi-bot` in the existing repository history
 
 | Check | Current evidence |
 | --- | --- |
-| Six real bot tokens saved in Credential Manager | Tokens not entered during implementation |
-| Actual numeric bot IDs and usernames from `getMe` | Unverified until each token is tested |
-| Cursor/Grok provisional username confirmation | Requires actual Telegram response and Zero's native confirmation |
+| Six real bot tokens saved in Credential Manager | Saved directly by Zero through the masked desktop fields; six credential slots confirmed |
+| Actual numeric bot IDs and usernames from `getMe` | All six verified against real Telegram responses |
+| Cursor/Grok provisional username confirmation | Actual usernames match `@ZPSwarmCursorBot` and `@ZPSwarmGrokBot`; no identity mismatch prompt needed |
 | Numeric owner and private-group pairing | Requires Zero to send the one-time commands and confirm natively |
 | HQ and one agent message delivery | No live test message has been sent |
 | Authenticated receipt return path | Requires Zero's Confirm received buttons |
 | Harmless approval round trip and duplicate button rejection | Implemented and unit tested; live owner interaction pending |
 | Real network disconnect, rate limiting and webhook migration | Logic tested; real-service fault injection not performed |
 
-No tokens, owner identities, receipts, messages, or approvals have been invented. Real Telegram success should be reported only after those native checks and user interactions are observed.
+No token values were read, echoed, or copied by the agent. Bot identity and local polling are verified; owner pairing, message receipt, and live owner approval remain pending. Automatic approval review rejected agent generation of the owner-pairing code because it changes authorization state. Zero must start Pair Zero and confirm the numeric binding directly in the desktop app.
 
 ## Operational limits
 
