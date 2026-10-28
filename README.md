@@ -53,7 +53,7 @@ Verified on this host during the upgrade:
 - **Codex:** a real readiness response succeeded with ChatGPT authentication.
 - **Claude:** authenticated with Pro, but inference hit the weekly usage limit. The CLI reported reset **October 29, 2026 at 3 p.m. America/Los_Angeles**. No paid API fallback was attempted.
 - **Gemini CLI / Cursor Agent CLI:** not installed here; adapters implemented but real inference unverified. The Cursor desktop editor is installed.
-- **Grok AI:** manual only. **Telegram:** six real bot identities verified and polling; Zero paired; HQ and Codex messages and owner receipt callbacks verified; harmless owner approval recorded in the native audit. Private-group pairing remains pending.
+- **Grok AI:** manual only. **Telegram:** six real bot identities verified and polling; Zero and the private headquarters group paired. HQ/Codex message receipts and harmless owner approvals are verified in both private and group chats. No project files were applied by these checks.
 
 Official references: [Codex auth](https://developers.openai.com/codex/auth), [Codex noninteractive](https://developers.openai.com/codex/noninteractive), [Claude CLI](https://code.claude.com/docs/en/cli-reference), [Gemini auth](https://geminicli.com/docs/get-started/authentication/), [Gemini policies](https://geminicli.com/docs/reference/policy-engine/), [Cursor headless](https://cursor.com/docs/cli/headless).
 
@@ -69,7 +69,7 @@ The dedicated **Telegram** page has HQ, Codex, Claude, Gemini, Cursor, Grok and 
 
 Read the complete [Telegram activation and setup guide](docs/TELEGRAM-SETUP.md) for all six mappings, token replacement/removal, pairing, commands, receiver conflicts, queue/restart behavior and the tested/untested boundary. Tokens stay in Windows Credential Manager, never source, Git, SQLite or frontend persistence. Do not paste them into this conversation. Any token exposed in chat history should be rotated.
 
-The original HTTPS webhook and voice path remains in a folded advanced section. Stop polling before registering a webhook for the same bot; the new native **Disconnect existing webhook** action explicitly handles the reverse migration without exposing credentials. See the guide for its separate legacy credential names. Six bot identities, polling, Zero's private-account pairing, HQ/Codex delivery and receipt, and a harmless owner approval have now been verified live. Private-group pairing remains a separate owner-controlled step.
+The original HTTPS webhook and voice path remains in a folded advanced section. Stop polling before registering a webhook for the same bot; the new native **Disconnect existing webhook** action explicitly handles the reverse migration without exposing credentials. See the guide for its separate legacy credential names. Six identities, polling, owner/private-group pairing, HQ/Codex receipts in private and group chats, and harmless owner approvals in both contexts have now been verified live. The validation report lists the remaining untested paths.
 
 ## Execution, owner control and recovery
 
@@ -100,7 +100,7 @@ cargo test --manifest-path src-tauri/Cargo.toml subscription_cli_smoke -- --igno
 
 The normal suite includes the original 173 tests plus concurrency/dependency/cancellation, complete review, migration and recorder/recovery coverage. Rust tests cover approval immutability, expiry, superseded revisions, single use, changed baselines, CLI safety/output parsing and Telegram webhook authentication/validation. Real inference is opt-in. `scripts/ui-smoke.cjs` checks the dashboard, recorded demo, native-only apply, replay scrubbing and integration setup with Playwright/Edge (`SWARM_PLAYWRIGHT_PATH` can point at an installed package).
 
-Telegram upgrade validation: **192 TypeScript tests passed**, **40 Rust tests passed** (one subscription probe deliberately opt-in), both browser smoke scripts passed, and the updated standalone desktop build succeeded. All six real bot identities and polling receivers were verified. Zero paired the private account, confirmed receipt of HQ and Codex messages, and approved a harmless probe; the native audit recorded `approved_probe` with no project files. The earlier real two-agent Ollama demo and Codex readiness probe remain documented above. Private-group pairing and live adversarial/restart fault tests are not claimed as complete.
+Telegram upgrade validation: **192 TypeScript tests passed**, **40 Rust tests passed** (one subscription probe deliberately opt-in), both browser smoke scripts passed, and the updated standalone desktop build succeeded. Live checks cover six bot identities/polling, native owner/private-group pairing, HQ/Codex sends and four authenticated receipts across private/group chats, and two harmless approvals audited as `approved_probe` without project files. The earlier real two-agent Ollama demo and Codex readiness probe remain documented above. Live adversarial/restart fault tests, posting from the other four agent bots, and fresh engineering-workflow delivery to the group are not claimed as complete.
 
 | Area | Implementation |
 | --- | --- |
